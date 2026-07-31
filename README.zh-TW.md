@@ -9,6 +9,8 @@
 
 ![載入示範路網的工具畫面](docs/screenshot-zh.png)
 
+<sub>淺色／深色主題、英文／繁體中文皆可即時切換——[深色主題](docs/screenshot-dark.png)</sub>
+
 **它不產出 SVG。** 你拖到圖好看為止，工具匯出一份**搬動清單**（純文字的位移表），
 再由你自己的產圖程式重新繪製。成品因此永遠是機器生成、可重現的，而人做的判斷則變成
 可審閱、可 diff、可重播的文字。
@@ -48,7 +50,8 @@ http://localhost:8000/?svg=path/to/your-diagram.svg
 ……並修改 `index.html` 最上方的 `CONFIG`，讓選擇器對得上你的標記。見
 [地圖規格](#地圖規格)。
 
-介面語言預設跟隨瀏覽器，隨時可切換；加 `?lang=zh` 或 `?lang=en` 可強制指定。
+介面語言預設跟隨瀏覽器、配色主題預設跟隨作業系統，兩者都可以在標題列切換並會記住。
+加 `?lang=zh|en` 或 `?theme=dark|light` 可強制指定。
 
 ---
 
@@ -211,13 +214,13 @@ URL 參數可批次驅動它們，結果以 JSON 寫進隱藏的 `<pre>` 節點�
 | `?uitest=` | `#uitestresult` |
 
 ```sh
-python3 tools/selftest.py          # 16 項檢查，用無頭 Chrome
+python3 tools/selftest.py          # 17 項檢查，用無頭 Chrome
 python3 tools/make_demo_map.py     # 重新產生示範路網
 ```
 
 ---
 
-## 介面語言
+## 介面語言與主題
 
 英文與繁體中文共用一張表（`index.html` 裡的 `I18N`）。靜態標記透過 `data-i18n` /
 `data-i18n-attr` 翻譯；執行期字串呼叫 `t(key, params)`。找不到的 key 會退回英文、再
@@ -225,6 +228,13 @@ python3 tools/make_demo_map.py     # 重新產生示範路網
 
 要新增語言：複製 `en` 區塊、翻譯值，切換器就會認得。匯出的搬動清單與程式化介面丟出
 的 `Error()` 訊息刻意維持英文——前者給機器讀，後者給開發者讀。
+
+主題的做法一樣。所有隨主題改變的值都是宣告在 `:root[data-theme="light"]` 與
+`:root[data-theme="dark"]` 底下的語意 token；後面的規則只寫一次，而且不會出現任何寫死
+的顏色。切換主題就是改一個屬性，要加第三種主題也只是多一組變數，不是多一份樣式表。
+
+地圖本身在兩種主題下都維持淺色紙面——它是被編輯的文件，不是介面的一部分——畫在它上
+面的拖曳狀態顏色同理。
 
 ---
 

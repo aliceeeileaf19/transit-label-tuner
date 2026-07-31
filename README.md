@@ -10,6 +10,8 @@ generator can position approximately but never quite right.
 
 ![The tool with the demo network loaded](docs/screenshot-en.png)
 
+<sub>Light and dark themes, English and Traditional Chinese — [dark theme](docs/screenshot-dark.png)</sub>
+
 **It never writes SVG.** You drag things until the diagram reads well, and the
 tool exports a *move list* — a plain-text table of offsets. Your own generator
 re-renders the artwork from that table. The published diagram therefore stays
@@ -54,8 +56,9 @@ http://localhost:8000/?svg=path/to/your-diagram.svg
 …and edit the `CONFIG` block at the top of `index.html` so the selectors match
 your markup. See [The map contract](#the-map-contract).
 
-Interface language follows your browser and can be switched at any time; add
-`?lang=zh` or `?lang=en` to force it.
+Interface language follows your browser and theme follows your operating
+system; both can be switched from the header and are remembered. Add
+`?lang=zh|en` or `?theme=dark|light` to force either one.
 
 ---
 
@@ -233,13 +236,13 @@ URL parameters drive them in batch and publish JSON into hidden `<pre>` nodes:
 | `?uitest=` | `#uitestresult` |
 
 ```sh
-python3 tools/selftest.py          # 16 checks, headless Chrome
+python3 tools/selftest.py          # 17 checks, headless Chrome
 python3 tools/make_demo_map.py     # regenerate the demo network
 ```
 
 ---
 
-## Interface languages
+## Interface languages and themes
 
 English and Traditional Chinese, in one table (`I18N` in `index.html`). Static
 markup is translated through `data-i18n` / `data-i18n-attr`; runtime strings
@@ -250,6 +253,16 @@ To add a locale: copy the `en` block, translate the values, and the switch
 picks it up. The exported move list and the `Error()` messages from the
 scripting hooks stay in English by design — the first is consumed by machines,
 the second by developers.
+
+Themes work the same way. Every theme-dependent value is a semantic custom
+property declared under `:root[data-theme="light"]` and `:root[data-theme="dark"]`;
+the rules that follow are written once and never name a raw colour. Switching
+is a single attribute write, and a third theme is a third variable block rather
+than a third copy of the stylesheet.
+
+The diagram itself stays on light paper in both themes — it is the document
+being edited, not part of the chrome — and so do the drag-state colours drawn
+on top of it.
 
 ---
 

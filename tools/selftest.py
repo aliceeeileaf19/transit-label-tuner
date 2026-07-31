@@ -260,6 +260,26 @@ def _(run):
     return "en=%r / zh=%r" % (a.split("\n")[0][:28], b.split("\n")[0][:28])
 
 
+@check("both themes resolve their tokens, and the map keeps its own paper")
+def _(run):
+    light = run(uitest="1", theme="light")
+    dark = run(uitest="1", theme="dark")
+    for r in (light, dark):
+        assert not r["errors"], r["errors"]
+    assert light["state"]["theme"] == "light", light["state"]
+    assert dark["state"]["theme"] == "dark", dark["state"]
+    # A token that failed to resolve leaves the property empty, which is how a
+    # half-finished theme block shows up.
+    for name, r in (("light", light), ("dark", dark)):
+        t = r["state"]["tokens"]
+        missing = [k for k, v in t.items() if not v.strip()]
+        assert not missing, "%s theme has unresolved tokens: %s" % (name, missing)
+    assert light["state"]["paper"] == dark["state"]["paper"], \
+        "the artwork background must not change with the theme"
+    return "light/dark both resolve %d tokens, paper=%s" % (
+        len(light["state"]["tokens"]), light["state"]["paper"])
+
+
 @check("the exported move list carries no interface language")
 def _(run):
     r = run(test={"ops": [{"t": "name", "key": "Old Mill|R03", "dx": 0, "dy": 4}]},
