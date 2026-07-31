@@ -253,6 +253,26 @@ the second by developers.
 
 ---
 
+## Why this exists
+
+I built this for myself, while drawing a large 2D transit diagram.
+
+The diagram came out of a generator, and the generator was good at everything
+except the last five percent — the station names that ended up on top of a
+route line, the code tag on the wrong side of a dot, the legend sitting where
+a label needed to go. Fixing those by hand in the SVG worked exactly once:
+the next regeneration threw all of it away.
+
+So the tool refuses to write SVG at all. It records *what you decided* rather
+than *what you drew*, and hands that back as a table the generator can replay
+forever. Everything else here — the snapping that will not let you invent a
+value the drawing does not already use, the live overlap counts, the export
+that tells you which row is unusable and why — came from the same place:
+mistakes that were expensive to find hours later, and cheap to prevent at the
+moment of the drag.
+
+---
+
 ## Known limitations
 
 - Dragging is mouse-only. Keyboard users can nudge a *selected* item with the
