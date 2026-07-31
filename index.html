@@ -1,0 +1,2722 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Transit Label Tuner</title>
+<style>
+  :root{
+    color-scheme:dark;
+    --night-0:#02070c;--night-1:#06131e;--night-2:#0a2637;
+    --glass:rgba(5,20,31,.86);--glass-strong:rgba(3,15,25,.94);
+    --glass-soft:rgba(116,211,255,.06);--line:rgba(131,211,244,.2);
+    --line-hot:rgba(126,224,255,.58);--text:#e9f7ff;--muted:#88a8ba;
+    --blue:#64c9ff;--cyan:#51e3d4;--violet:#8c9dff;--coral:#ff857d;
+    --shadow:0 22px 54px rgba(0,0,0,.42),0 8px 22px rgba(0,0,0,.28);
+    --inner:inset 0 1px 0 rgba(203,241,255,.1),inset 0 -1px 0 rgba(0,0,0,.28);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:'Noto Sans TC','PingFang TC',-apple-system,BlinkMacSystemFont,sans-serif;
+    background:linear-gradient(rgba(95,197,235,.022) 1px,transparent 1px),
+               linear-gradient(90deg,rgba(95,197,235,.022) 1px,transparent 1px),
+               radial-gradient(circle at 51% 30%,rgba(28,104,142,.24),transparent 45%),
+               linear-gradient(145deg,var(--night-2),var(--night-0) 70%);
+    background-size:36px 36px,36px 36px,auto,auto;color:var(--text);overflow:hidden}
+  body:before,body:after{content:"";position:fixed;pointer-events:none;opacity:.72}
+  body:before{inset:0;background:linear-gradient(180deg,rgba(72,185,225,.07),transparent 12%,transparent 86%,rgba(4,13,22,.72));
+    box-shadow:inset 0 0 100px rgba(0,0,0,.42)}
+  body:after{left:50%;top:0;width:1px;height:100%;background:linear-gradient(transparent,rgba(98,211,250,.12),transparent);
+    box-shadow:0 0 42px rgba(79,190,232,.18)}
+  #stage{position:absolute;inset:0;overflow:hidden;cursor:grab}
+  #stage.panning{cursor:grabbing}
+  #host{position:absolute;left:0;top:0;transform-origin:0 0}
+  #host>svg{display:block;background:#fbfaf6;
+    box-shadow:0 0 0 1px rgba(147,224,250,.17),0 28px 80px rgba(0,0,0,.5),0 0 48px rgba(74,183,222,.08)}
+
+  /* Interaction states are class-only — never a geometry attribute */
+  .lbl,.boss-code-label text{cursor:move}
+  .dt-hot{fill:#0a58ca !important}
+  .dt-hot-ldr{stroke:#0a58ca !important;stroke-width:1.6 !important}
+  .dt-sel{fill:#b8860b !important}
+  .dt-moved{fill:#0f7b3f !important}
+  .dt-veto{fill:#d40000 !important}
+  .dt-ring{fill:none;stroke:#0a58ca;stroke-width:1.2;pointer-events:none}
+  .dt-vetobox{fill:none;stroke:#d40000;stroke-width:1.6;pointer-events:none}
+
+  .pane{position:absolute;background:linear-gradient(155deg,rgba(10,39,55,.9),var(--glass));
+    border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow),var(--inner);
+    -webkit-backdrop-filter:blur(18px) saturate(128%);backdrop-filter:blur(18px) saturate(128%);
+    font-size:12px;line-height:1.5;color:var(--text)}
+  .pane:before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+    background:linear-gradient(115deg,rgba(191,239,255,.09),transparent 20%,transparent 78%,rgba(72,194,239,.045))}
+  .pane>*{position:relative}
+  #topbar{top:16px;left:16px;padding:14px 16px 13px;width:468px;max-width:calc(100vw - 402px);
+    border-color:rgba(119,215,249,.27);border-left:2px solid rgba(100,210,248,.76);
+    background:linear-gradient(110deg,rgba(7,30,45,.96),rgba(5,18,29,.88))}
+  #topbar:after{content:"COMMAND / 01";position:absolute;right:14px;bottom:9px;color:rgba(124,207,238,.32);
+    font:700 8px ui-monospace,SFMono-Regular,monospace;letter-spacing:.16em}
+  .brandRow{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:10px}
+  .brandCopy{min-width:0}
+  .eyebrow{display:block;margin-bottom:3px;color:#73d6ff;font-size:8.5px;font-weight:800;letter-spacing:.2em}
+  #topbar b{display:block;font-size:16px;line-height:1.25;letter-spacing:.025em;text-shadow:0 0 18px rgba(90,204,255,.16)}
+  #srcName{display:block;margin-top:2px;color:var(--muted);font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .offlineBadge{flex:0 0 auto;padding:4px 8px;border:1px solid rgba(81,227,212,.3);border-radius:3px;
+    background:rgba(81,227,212,.07);color:#7ef2e3;font-size:8px;font-weight:800;letter-spacing:.16em}
+  .quickHint{margin:0 0 9px;color:#c8d6e8;font-size:11px}
+  .actionRow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .actionRow+.actionRow{margin-top:6px}
+  .actionRow .spacer{flex:1}
+  .shortcutStrip{display:flex;gap:5px;overflow:hidden;margin-top:9px;padding-top:9px;border-top:1px solid rgba(117,210,244,.12);
+    color:var(--muted);font-size:10px;white-space:nowrap}
+  .k{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;
+    border:1px solid rgba(126,215,247,.18);border-radius:3px;background:rgba(105,205,241,.06);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08);color:#dceaff;font:600 10px ui-monospace,SFMono-Regular,monospace}
+  #movedCount{margin-left:auto;color:#a9bad0;font-size:10px}
+  #counts{padding:12px 13px;min-width:230px}
+  #counts table{border-collapse:collapse;width:100%}
+  #counts td{padding:2px 0;color:#c2d0e2}
+  #counts td:last-child{text-align:right;font-family:ui-monospace,monospace}
+  #counts .warn{color:#ff9a9e;font-weight:800;text-shadow:0 0 16px rgba(255,80,90,.35)}
+  #info{left:16px;bottom:16px;padding:8px 13px 8px 18px;max-width:660px;min-height:34px;border-radius:5px;
+    border-left:2px solid rgba(81,227,212,.72);background:rgba(3,17,27,.92);color:#bad1de}
+  #exportPane{right:12px;top:12px;padding:15px;width:560px;max-height:calc(100vh - 24px);
+    display:flex;flex-direction:column;background:var(--glass-strong);z-index:40}
+  #exportPane textarea{width:100%;flex:1;min-height:220px;font-family:ui-monospace,monospace;
+    font-size:11px;white-space:pre;border:1px solid var(--line);border-radius:12px;padding:10px;
+    background:rgba(2,8,18,.66);color:#d9e7f8;resize:vertical}
+  button,input{font:inherit}
+  button{padding:5px 10px;min-height:30px;border:1px solid rgba(125,211,243,.18);
+    background:linear-gradient(180deg,rgba(111,207,244,.1),rgba(60,126,157,.04));color:#e7f7ff;
+    border-radius:4px;box-shadow:inset 0 1px 0 rgba(211,244,255,.07),0 4px 12px rgba(0,0,0,.15);
+    cursor:pointer;transition:transform .16s ease,border-color .16s ease,background .16s ease,box-shadow .16s ease}
+  button:hover{transform:translateY(-1px);border-color:var(--line-hot);background:rgba(114,169,238,.18);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.11),0 7px 18px rgba(0,0,0,.18)}
+  button:active{transform:translateY(0) scale(.98)}
+  #btnExport,#btnSearch,#btnDown{border-color:rgba(100,201,255,.58);
+    background:linear-gradient(135deg,rgba(33,135,184,.92),rgba(47,106,159,.92));
+    box-shadow:inset 0 1px 0 rgba(210,244,255,.17),0 0 18px rgba(65,188,235,.14)}
+  #btnReset,#btnClearDraft{color:#ffb0b3}
+  button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid rgba(99,167,255,.8);outline-offset:3px}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  #boot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(circle at 50% 42%,#142b4e,#050a13 62%);font-size:13px;color:#a9c8ee;
+    text-align:center;z-index:50}
+  #boot span{display:flex;flex-direction:column;gap:4px}
+  #boot b{color:#dff6ff;font-size:13px;letter-spacing:.04em}
+  #boot small{color:#7fa3b8;font-size:10px}
+  #boot:after{content:"";width:7px;height:7px;margin-left:10px;border-radius:50%;background:var(--blue);
+    box-shadow:0 0 18px var(--blue);animation:pulse 1s ease-in-out infinite alternate}
+  @keyframes pulse{to{opacity:.28;transform:scale(.72)}}
+ .err{color:#ff999e;font-weight:800}
+ #rightDock{position:absolute;right:16px;top:16px;bottom:16px;z-index:20;width:348px;
+   display:flex;flex-direction:column;gap:0;overflow:auto;pointer-events:auto;padding:4px 0;
+   border:1px solid rgba(126,215,247,.22);border-right:2px solid rgba(100,210,248,.52);border-radius:8px;
+   background:linear-gradient(170deg,rgba(7,30,45,.94),rgba(3,15,25,.93));
+   box-shadow:var(--shadow),inset 0 1px 0 rgba(205,241,255,.07);
+   -webkit-backdrop-filter:blur(18px) saturate(125%);backdrop-filter:blur(18px) saturate(125%);
+   scrollbar-width:thin;scrollbar-color:rgba(105,205,241,.24) transparent}
+ #rightDock:before{content:var(--dock-label,"LAYOUT CONTROLS");display:block;flex:0 0 auto;padding:7px 13px 8px;
+   border-bottom:1px solid rgba(117,210,244,.13);color:rgba(118,210,244,.55);
+   font:700 8px ui-monospace,SFMono-Regular,monospace;letter-spacing:.17em}
+ #rightDock::-webkit-scrollbar{width:5px}
+ #rightDock::-webkit-scrollbar-thumb{background:rgba(145,190,245,.28);border-radius:99px}
+ #rightDock>.pane{position:static!important;width:auto!important;flex:0 0 auto;pointer-events:auto;
+   border:0;border-bottom:1px solid rgba(117,210,244,.12);border-radius:0;background:transparent;
+   box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+ #rightDock>.pane:last-child{border-bottom:0}
+ #rightDock>.pane:before{display:none}
+ #rightDock .pane{padding:12px 14px}
+ #rightDock b,#rightDock details>summary{font-size:11px;letter-spacing:.04em;color:#eef6ff}
+ #rightDock details>summary{cursor:pointer;font-weight:750;list-style:none}
+ #rightDock details>summary::-webkit-details-marker{display:none}
+ #rightDock details>summary:before{content:"›";display:inline-block;margin-right:7px;color:var(--blue);font-size:16px;
+   line-height:10px;transform:rotate(0);transition:transform .15s ease}
+ #rightDock details[open]>summary:before{transform:rotate(90deg)}
+ #searchRow{display:flex;gap:6px;margin-top:7px}
+ #stationSearch{flex:1;min-width:0;padding:7px 10px;border:1px solid rgba(117,210,244,.18);border-radius:4px;
+   background:rgba(1,10,17,.58);color:var(--text);box-shadow:inset 0 1px 7px rgba(0,0,0,.24)}
+ #stationSearch::placeholder{color:#71849d}
+ #layerPane label{display:inline-flex;align-items:center;gap:5px;margin:6px 5px 0 0;padding:4px 8px;
+   border:1px solid rgba(117,210,244,.12);border-radius:3px;color:#8da9b8;background:rgba(2,12,20,.26);
+   cursor:pointer;transition:.15s ease}
+ #layerPane label:has(input:checked){color:#e9f4ff;border-color:rgba(99,167,255,.34);background:rgba(79,137,225,.15)}
+ #layerPane input{margin:0;accent-color:var(--blue)}
+ #draftStatus{font-size:10px;color:#8fa5be;margin-top:7px}
+ #sessionPane button{margin:6px 3px 0 0}
+ #inspectorBody{font-family:ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap;line-height:1.55;
+   margin-top:7px;padding:8px 9px;border-left:2px solid rgba(100,201,255,.35);border-radius:2px;
+   background:rgba(1,10,17,.43);color:#aac4d2}
+ #exportSummary{padding:9px 10px;margin:7px 0 9px;border:1px solid rgba(85,230,210,.18);border-radius:10px;
+   background:rgba(85,230,210,.08);color:#a9ecdf}
+ #exportSummary.bad{border-color:rgba(255,126,131,.22);background:rgba(255,88,96,.09);color:#ffadb0;font-weight:700}
+ #extPane,#ext2Pane{z-index:10}
+ #ext2Table{border-collapse:collapse;width:100%}
+ #ext2Table td{padding:2px 3px;color:#b6c6d9}
+ #ext2Table td.n{text-align:right;font-variant-numeric:tabular-nums}
+ #ext2Table tr.sel{background:rgba(99,167,255,.17)}
+ g.ext-trace{pointer-events:none}
+ #extTable{border-collapse:collapse;width:100%}
+ #extTable td{padding:2px 3px;color:#b6c6d9}
+ #extTable td.n{text-align:right;font-variant-numeric:tabular-nums}
+ #extTable tr.sel{background:rgba(99,167,255,.17)}
+ .lock-labels text.lbl,.lock-codes g.boss-code-label text{pointer-events:none!important;cursor:not-allowed!important}
+ .lock-blocks g.ext-wrap{pointer-events:none!important}
+ .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;
+   overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+ .state-symbol{font-weight:900;margin-right:3px}
+
+ /* Light industrial theme: low chroma, black primary controls, one accent */
+ :root{
+   color-scheme:light;
+   --night-0:#d9dcdd;--night-1:#eef0f0;--night-2:#f8f9f8;
+   --glass:rgba(249,250,249,.88);--glass-strong:rgba(251,252,251,.97);
+   --glass-soft:rgba(255,255,255,.62);--line:rgba(16,20,21,.10);
+   --line-hot:rgba(16,20,21,.30);--text:#141718;--muted:#717778;
+   --blue:#b8d900;--cyan:#b8d900;--violet:#141718;--coral:#c44b45;
+   --shadow:0 18px 48px rgba(28,34,35,.13),0 3px 10px rgba(28,34,35,.06);
+   --inner:inset 0 1px 0 rgba(255,255,255,.94);
+ }
+ html,body{
+   background:
+     radial-gradient(circle at 43% 20%,rgba(255,255,255,.98),rgba(245,247,246,.84) 34%,transparent 64%),
+     linear-gradient(145deg,#d5d8d9 0%,#eef0ef 42%,#cfd3d4 100%);
+   background-size:auto;color:var(--text)
+ }
+ body:before{opacity:.62;background:linear-gradient(180deg,rgba(255,255,255,.72),transparent 20%,transparent 78%,rgba(90,97,99,.10));
+   box-shadow:inset 0 0 120px rgba(83,90,92,.10)}
+ body:after{display:none}
+ #host>svg{background:#fbfaf6;
+   box-shadow:0 0 0 1px rgba(25,30,31,.07),0 24px 70px rgba(37,43,44,.16)}
+
+ .pane{
+   background:rgba(250,251,250,.90);border:1px solid rgba(18,22,23,.09);border-radius:17px;
+   box-shadow:var(--shadow),var(--inner);color:var(--text);
+   -webkit-backdrop-filter:blur(13px) saturate(108%);backdrop-filter:blur(13px) saturate(108%)
+ }
+ .pane:before{background:linear-gradient(125deg,rgba(255,255,255,.68),transparent 38%,rgba(255,255,255,.18))}
+ #topbar{top:18px;left:18px;padding:16px 17px 15px;width:476px;
+   border:1px solid rgba(20,24,25,.10);border-left:1px solid rgba(20,24,25,.10);
+   background:rgba(249,250,249,.92)}
+ #topbar:after{content:"LAYOUT / 01";right:16px;bottom:11px;color:rgba(20,24,25,.28);
+   font:700 8px ui-monospace,SFMono-Regular,monospace;letter-spacing:.15em}
+ .eyebrow{color:#747a7b;font-size:8px;font-weight:750;letter-spacing:.18em}
+ #topbar b{font-size:17px;font-weight:650;letter-spacing:-.01em;text-shadow:none}
+ #srcName{color:#818687}
+ .offlineBadge{padding:5px 9px;border:1px solid rgba(20,24,25,.10);border-radius:99px;
+   background:rgba(255,255,255,.64);color:#4f5556;font-size:8px;letter-spacing:.12em}
+ .offlineBadge:before{content:"";display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;
+   background:#b8d900;box-shadow:0 0 0 3px rgba(184,217,0,.14);vertical-align:-1px}
+ .quickHint{color:#656b6c}
+ .shortcutStrip{border-top-color:rgba(20,24,25,.08);color:#777d7e}
+ .k{border-color:rgba(20,24,25,.10);border-radius:7px;background:rgba(255,255,255,.72);
+   box-shadow:none;color:#343839}
+ #movedCount{color:#6f7576}
+
+ button{min-height:31px;padding:5px 11px;border:1px solid rgba(20,24,25,.10);
+   border-radius:9px;background:rgba(255,255,255,.72);color:#25292a;
+   box-shadow:0 2px 6px rgba(27,32,33,.04);
+   font-weight:560;transition:transform .14s ease,border-color .14s ease,background .14s ease,box-shadow .14s ease}
+ button:hover{transform:translateY(-1px);border-color:rgba(20,24,25,.25);background:#fff;
+   box-shadow:0 7px 15px rgba(27,32,33,.09)}
+ button:active{transform:translateY(0) scale(.985)}
+ #btnExport,#btnSearch,#btnDown{border-color:#111415;background:#111415;color:#fff;
+   box-shadow:0 7px 16px rgba(17,20,21,.16)}
+ #btnExport:hover,#btnSearch:hover,#btnDown:hover{border-color:#25292a;background:#25292a}
+ #btnReset,#btnClearDraft{color:#a23f3a}
+ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid rgba(184,217,0,.50);outline-offset:2px}
+ button:disabled{opacity:.38}
+
+ #boot{background:radial-gradient(circle at 50% 40%,#fdfefd,#e0e3e3 68%);color:#666c6d}
+ #boot b{color:#151819;font-size:14px;font-weight:650}
+ #boot small{color:#777d7e}
+ #boot:after{background:#b8d900;box-shadow:0 0 0 5px rgba(184,217,0,.14)}
+ .err{color:#b54440}
+
+ #rightDock{right:18px;top:18px;bottom:18px;width:352px;padding:5px 0;
+   border:1px solid rgba(20,24,25,.10);border-right:1px solid rgba(20,24,25,.10);border-radius:18px;
+   background:rgba(249,250,249,.92);box-shadow:var(--shadow),var(--inner);
+   -webkit-backdrop-filter:blur(13px) saturate(108%);backdrop-filter:blur(13px) saturate(108%);
+   scrollbar-color:rgba(30,35,36,.18) transparent}
+ #rightDock:before{padding:9px 15px 10px;border-bottom-color:rgba(20,24,25,.08);
+   color:#858a8b;font-size:8px;letter-spacing:.15em}
+ #rightDock::-webkit-scrollbar-thumb{background:rgba(30,35,36,.18)}
+ #rightDock>.pane{border-bottom-color:rgba(20,24,25,.08);background:transparent}
+ #rightDock .pane{padding:13px 15px}
+ #rightDock b,#rightDock details>summary{color:#25292a;font-size:11.5px;font-weight:650}
+ #rightDock details>summary:before{color:#8ba400}
+ #stationSearch{border-color:rgba(20,24,25,.11);border-radius:9px;background:rgba(255,255,255,.78);
+   color:#151819;box-shadow:inset 0 1px 2px rgba(24,28,29,.04)}
+ #stationSearch::placeholder{color:#999e9f}
+ #layerPane label{border-color:rgba(20,24,25,.09);border-radius:8px;color:#656b6c;background:rgba(255,255,255,.48)}
+ #layerPane label:has(input:checked){color:#171a1b;border-color:rgba(20,24,25,.20);background:#fff}
+ #layerPane input{accent-color:#111415}
+ #draftStatus{color:#777d7e}
+ #inspectorBody{border-left-color:#b8d900;background:rgba(255,255,255,.52);color:#596061}
+ #counts td,#ext2Table td,#extTable td{color:#555b5c}
+ #counts .warn{color:#b54440;text-shadow:none}
+ #ext2Table tr.sel,#extTable tr.sel{background:rgba(184,217,0,.15)}
+ #info{left:18px;bottom:18px;border:1px solid rgba(20,24,25,.09);border-left:3px solid #b8d900;
+   border-radius:12px;background:rgba(249,250,249,.94);color:#565c5d}
+ #exportPane{background:rgba(250,251,250,.98)}
+ #exportPane textarea{border-color:rgba(20,24,25,.11);border-radius:11px;background:#f3f4f3;color:#25292a}
+ #exportSummary{border-color:rgba(125,151,0,.18);background:rgba(184,217,0,.11);color:#586600}
+ #exportSummary.bad{border-color:rgba(181,68,64,.20);background:rgba(181,68,64,.08);color:#a23f3a}
+
+ /* 語言切換 / language switch */
+ .badgeRow{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto}
+ #langSwitch{display:inline-flex;padding:2px;border:1px solid rgba(20,24,25,.10);border-radius:99px;
+   background:rgba(255,255,255,.64)}
+ #langSwitch button{min-height:22px;padding:2px 10px;border:0;border-radius:99px;background:transparent;
+   box-shadow:none;color:#767c7d;font-size:10px;font-weight:650;letter-spacing:.04em}
+ #langSwitch button:hover{transform:none;background:rgba(20,24,25,.05);box-shadow:none}
+ #langSwitch button[aria-pressed="true"]{background:#111415;color:#fff}
+
+ @media(max-width:980px){
+   #topbar{width:min(468px,calc(100vw - 32px));max-width:none}
+   #rightDock{left:16px;right:16px;top:auto;width:auto;bottom:16px;max-height:47vh}
+   #info{max-width:calc(100vw - 32px)}
+   #exportPane{left:12px;right:12px;width:auto;max-height:calc(100vh - 24px)}
+ }
+ @media(max-width:640px){
+   #topbar{padding:12px}
+   .shortcutStrip{display:none}
+   #rightDock{max-height:43vh}
+   #info{right:12px;max-width:none;font-size:10px}
+   .offlineBadge{display:none}
+ }
+ @media(prefers-reduced-motion:reduce){
+   *,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;
+     animation-iteration-count:1!important;transition-duration:.01ms!important}
+ }
+</style>
+</head>
+<body>
+<div id="stage"><div id="host"></div></div>
+<div id="boot"><span><b data-i18n="boot.title">Loading map…</b><small data-i18n="boot.hint"></small></span></div>
+
+<div class="pane" id="topbar">
+  <div class="brandRow">
+    <div class="brandCopy">
+      <span class="eyebrow" data-i18n="app.eyebrow">TRANSIT DIAGRAM · LAYOUT TOOL</span>
+      <b data-i18n="app.title">Transit Label Tuner</b>
+      <span id="srcName"></span>
+    </div>
+    <div class="badgeRow">
+      <span class="offlineBadge" data-i18n="badge.offline">OFFLINE</span>
+      <div id="langSwitch" role="group" data-i18n-attr="aria-label:lang.group">
+        <button type="button" data-lang="en" aria-pressed="false">EN</button>
+        <button type="button" data-lang="zh" aria-pressed="false">中文</button>
+      </div>
+    </div>
+  </div>
+  <div class="quickHint" data-i18n="hint.quick"></div>
+  <div class="actionRow">
+    <button id="btnUndo" data-i18n="btn.undo" data-i18n-attr="aria-label:btn.undo"></button>
+    <button id="btnRedo" data-i18n="btn.redo" data-i18n-attr="aria-label:btn.redo"></button>
+    <button id="btnAngleFlat" data-i18n="btn.angleFlat" data-i18n-attr="title:btn.angleFlat.title"></button>
+    <button id="btnAngleSteep" data-i18n="btn.angleSteep" data-i18n-attr="title:btn.angleSteep.title"></button>
+    <span class="spacer"></span>
+    <button id="btnFit" data-i18n="btn.fit"></button>
+  </div>
+  <div class="actionRow">
+    <button id="btnExport" data-i18n="btn.export"></button>
+    <button id="btnReset" data-i18n="btn.reset"></button>
+    <span id="movedCount"></span>
+  </div>
+  <div class="shortcutStrip">
+    <span class="k" data-i18n="key.wheel"></span><span data-i18n="key.wheel.do"></span>
+    <span class="k" data-i18n="key.space"></span><span data-i18n="key.space.do"></span>
+    <span class="k">←↑↓→</span><span data-i18n="key.arrows.do"></span>
+    <span class="k">Esc</span><span data-i18n="key.esc.do"></span>
+    <span class="k">L</span><span data-i18n="key.trace.do"></span>
+  </div>
+</div>
+
+<div id="rightDock" data-i18n-attr="aria-label:dock.aria">
+<div class="pane" id="searchPane">
+  <b data-i18n="search.title"></b>
+  <div id="searchRow">
+    <label class="sr-only" for="stationSearch" data-i18n="search.label"></label>
+    <input id="stationSearch" list="stationChoices" autocomplete="off"
+           data-i18n-attr="placeholder:search.placeholder">
+    <datalist id="stationChoices"></datalist>
+    <button id="btnSearch" data-i18n="search.go" data-i18n-attr="aria-label:search.go.aria"></button>
+  </div>
+</div>
+<div class="pane" id="layerPane">
+  <details open><summary data-i18n="layer.title"></summary>
+    <label><input type="checkbox" data-layer="labels" checked><span data-i18n="kind.labels"></span></label>
+    <label><input type="checkbox" data-layer="codes" checked><span data-i18n="kind.codes"></span></label>
+    <label><input type="checkbox" data-layer="leaders" checked><span data-i18n="kind.leaders"></span></label>
+    <label><input type="checkbox" data-layer="blocks" checked><span data-i18n="kind.blocks"></span></label>
+    <label><input type="checkbox" data-layer="newlines" checked><span data-i18n="kind.newlines"></span></label>
+  </details>
+</div>
+<div class="pane" id="inspector" aria-live="polite">
+  <b data-i18n="inspector.title"></b>
+  <div id="inspectorBody" data-i18n="inspector.empty"></div>
+</div>
+<div class="pane" id="sessionPane">
+  <details><summary data-i18n="session.title"></summary>
+    <div style="margin-top:5px">
+      <button id="btnRestoreDraft" data-i18n="session.restore"></button>
+      <button id="btnClearDraft" data-i18n="session.clear"></button>
+      <button id="btnSaveSession" data-i18n="session.save"></button>
+      <button id="btnLoadSession" data-i18n="session.load"></button>
+      <input id="sessionFile" class="sr-only" type="file" accept=".json,application/json">
+      <div id="draftStatus" role="status" data-i18n="draft.none"></div>
+    </div>
+  </details>
+</div>
+<div class="pane" id="counts" aria-live="polite">
+  <b data-i18n="counts.title"></b>
+  <table id="countTable"></table>
+</div>
+</div>
+
+<div class="pane" id="info" role="status" aria-live="polite" data-i18n="info.hover"></div>
+
+<div class="pane" id="exportPane" role="dialog" aria-modal="true" aria-labelledby="exportTitle" style="display:none">
+  <div style="margin-bottom:4px"><b id="exportTitle" data-i18n="export.title"></b>
+    <button id="btnCopy" style="float:right" data-i18n="export.copy"></button><button id="btnDown" style="float:right;margin-right:4px" data-i18n="export.download"></button>
+    <button id="btnCloseExp" style="float:right;margin-right:4px" data-i18n="export.close"></button></div>
+  <div id="exportSummary" aria-live="polite"></div>
+  <label class="sr-only" for="exportText" data-i18n="export.textLabel"></label>
+  <textarea id="exportText" spellcheck="false" data-i18n-attr="aria-label:export.textLabel"></textarea>
+</div>
+
+<script>
+"use strict";
+/* =======================================================================
+   Transit Label Tuner — a read-only editor for transit diagrams.
+
+   The tool never writes SVG. It emits a *move list*: a plain-text table of
+   the offsets you dragged. Your own generator re-renders the diagram from
+   that table, so the published artwork is always machine-generated and the
+   edits stay reviewable, diffable and replayable.
+
+   Single source of geometry
+   -------------------------
+   The quadrant slots, the overlap test (SAT) and the panel-rect rule are the
+   contract between this tool and whatever applies the move list downstream.
+   If you port this to your own pipeline, keep them in one place and assert
+   they match — a browser that disagrees with your batch checker is worse
+   than no checker at all.
+   ======================================================================= */
+
+/* =========================== CONFIG ====================================
+   Everything diagram-specific lives here. Point it at your own SVG and the
+   rest of the tool follows. See README.md for the structure a map must have.
+   ===================================================================== */
+const CONFIG = {
+  /* Loaded when no ?svg= is given. */
+  defaultSvg: "demo/demo-map.svg",
+
+  /* How to find things in the SVG. The data-* attribute names are fixed:
+     stations need data-name/data-code/data-x/data-y, code groups need
+     data-name/data-code/data-station-x/data-station-y. */
+  selectors: {
+    station:   "g.stn-g",
+    label:     "text.lbl",
+    codeGroup: "g.stn-code",
+    leader:    "line.ldr",
+    route:     'path[class^="rt"]'
+  },
+
+  /* Station-code quadrants: offset from the station centre plus the
+     text-anchor that goes with it. A code is only ever allowed to sit on
+     one of these eight positions, so a drag can never invent a new one. */
+  slots: {
+    "S":  [ 0.0,  12.0, "middle"],
+    "E":  [ 8.0,   2.5, "start" ],
+    "W":  [-8.0,   2.5, "end"   ],
+    "N":  [ 0.0,  -8.0, "middle"],
+    "NE": [ 8.0,  -6.0, "start" ],
+    "SE": [ 8.0,   7.0, "start" ],
+    "NW": [-8.0,  -7.0, "end"   ],
+    "SW": [-8.0,  10.5, "end"   ]
+  },
+
+  /* The angle ladder for slanted labels. Deliberately a short list: if a
+     one-off angle existed in the artwork, leaving it out of the ladder stops
+     users from snapping onto it and quietly breeding a second one. */
+  snapAngles: [0, -40, -50, -60, -70],
+
+  /* Layout blocks that can be dragged and scaled as a unit. `id` must match
+     an element id in the SVG; `key` is looked up in the translation table. */
+  blocks: [
+    {id: "title-block",        key: "block.title"},
+    {id: "legend",             key: "block.legend"},
+    {id: "under-construction", key: "block.construction"},
+    {id: "outlying",           key: "block.outlying"},
+    {id: "notes",              key: "block.notes"}
+  ],
+
+  /* "Not to scale" proposal boxes. The tool locates each one by its marker
+     text and the smallest rect that contains it, then lets you drag the whole
+     box. `keys` maps "roundedX,roundedY" of that rect to the identifier your
+     downstream applier uses; a box with no key exports as a warning instead
+     of being silently dropped. */
+  schematic: {
+    marker: /SCHEMATIC ONLY/,
+    keys: {"25,300": "Harbour Line|Phase 2"},
+    setback: 15            /* corner radius convention, in map units */
+  },
+
+  limits: {
+    maxOffset: 120,        /* refuse to export a label dragged further than this */
+    panelAreaRatio: 0.12,  /* a filled rect smaller than this share of the canvas
+                              counts as a panel/card that labels must not cover */
+    leaderStationEnd: 1.0, /* leader x1,y1 must sit this close to the station */
+    leaderLabelEnd: 30     /* leader x2,y2 must start this close to the label */
+  },
+
+  formatVersion: "2",
+
+  /* Replaced by your packaging step with the SHA-256 of the source SVG, so a
+     draft or session file can never be applied to a different drawing. */
+  sourceFingerprint: "__SOURCE_SHA256__"
+};
+
+/* Back-compat aliases used throughout the file. */
+const SLOTS = CONFIG.slots;
+const SNAP_ANGLES = CONFIG.snapAngles;
+const SEL = CONFIG.selectors;
+const PANEL_FORMAT_VERSION = CONFIG.formatVersion;
+const SOURCE_FINGERPRINT = CONFIG.sourceFingerprint;
+
+const qs = new URLSearchParams(location.search);
+const SVG_PATH = qs.get("svg") || CONFIG.defaultSvg;
+
+const $ = s => document.querySelector(s);
+const stage = $("#stage"), host = $("#host");
+
+/* =========================== i18n ======================================
+   Two locales, one table. `t(key, params)` substitutes {name} placeholders.
+   Static markup is translated through data-i18n / data-i18n-attr; anything
+   built at runtime calls t() directly.
+
+   Not translated on purpose:
+     · the exported move list — it is a machine artifact consumed by your
+       generator, so it stays in one language (English) whatever the UI shows;
+     · Error() messages thrown by the window.* scripting hooks — those are
+       developer-facing.
+   ===================================================================== */
+const I18N = {
+  en: {
+    "lang.group": "Interface language",
+    "app.eyebrow": "TRANSIT DIAGRAM · LAYOUT TOOL",
+    "app.title": "Transit Label Tuner",
+    "badge.offline": "OFFLINE",
+    "hint.quick": "Drag station names, codes and layout blocks. Everything snaps and re-checks on release.",
+    "boot.title": "Loading offline diagram",
+    "boot.hint": "A large embedded SVG takes a few seconds on first open. The map appears first; collision checking finishes in the background.",
+    "boot.step.inline": "Expanding the embedded diagram…",
+    "boot.step.outerSize": "Waiting for the canvas to report its real size…",
+    "boot.step.innerCoords": "Establishing map coordinates…",
+    "boot.step.index": "Indexing stations and labels…",
+    "boot.err.notSvg": "No <svg> element in {path}",
+    "boot.err.load": "Could not load {path}",
+    "boot.err.outerSize": "Canvas never reported a real size (container is 0×0)",
+    "boot.err.innerSize": "Inner map SVG never reported a real size",
+    "boot.err.ctm": "Could not compute the inner map transform",
+    "boot.loaded": "Loaded: {stations} stations / {labels} names / {codes} codes / {leaders} leaders / {panels} panels. Hover a name to see its code and leader.",
+    "boot.checking": "Map is ready. Collision checking is running in the background; export unlocks when it finishes.",
+    "boot.exportWhenDone": "Available once the background collision check finishes",
+
+    "btn.undo": "↶ Undo",
+    "btn.redo": "↷ Redo",
+    "btn.angleFlat": "↰ Flatten",
+    "btn.angleFlat.title": "Same as the [ key — one step toward 0°",
+    "btn.angleSteep": "↳ Steepen",
+    "btn.angleSteep.title": "Same as the ] key — one step toward the steepest angle",
+    "btn.fit": "Fit",
+    "btn.export": "Export move list",
+    "btn.reset": "Reset all",
+
+    "key.drag": "Drag",
+    "key.wheel": "Wheel", "key.wheel.do": "zoom",
+    "key.space": "Space + drag", "key.space.do": "pan",
+    "key.arrows.do": "nudge",
+    "key.esc.do": "cancel",
+    "key.trace.do": "trace",
+
+    "dock.aria": "LAYOUT CONTROLS",
+    "search.title": "Find and jump to a station",
+    "search.label": "Station name or code",
+    "search.placeholder": "e.g. Riverside, B03",
+    "search.go": "Go",
+    "search.go.aria": "Find station",
+    "search.empty": "Type a station name or code.",
+    "search.ambiguous": "Code {code} matches {n} stations: {names}. Pick one as “name | code”.",
+    "search.results": "Search results",
+    "search.notFound": "No match for “{q}”.",
+    "search.went": "Jumped to {name} ({code})",
+
+    "layer.title": "Selectable layers",
+    "kind.labels": "Names",
+    "kind.codes": "Codes",
+    "kind.leaders": "Leaders",
+    "kind.blocks": "Blocks",
+    "kind.newlines": "New lines",
+    "layer.updated": "Layers updated. Unchecked kinds can no longer be dragged by accident.",
+
+    "inspector.title": "Selection",
+    "inspector.empty": "Nothing selected. Click a name, code, leader or block to inspect it.",
+    "insp.type": "Type", "insp.name": "Name", "insp.code": "Code",
+    "insp.offset": "Offset", "insp.anchor": "Anchor", "insp.angle": "Angle",
+    "insp.leader": "Leader", "insp.status": "Status", "insp.quadrant": "Quadrant",
+    "insp.text": "Text", "insp.owner": "Belongs to", "insp.size": "Size",
+    "insp.endpoint": "Endpoint offset",
+    "type.label": "Station name", "type.code": "Station code",
+    "type.block": "Layout block", "type.leader": "Leader line",
+    "type.schem": "Proposal box",
+    "val.yes": "yes", "val.no": "no", "val.none": "none",
+    "st.covered": "⚠ covered by a panel",
+    "st.modified": "● modified",
+    "st.original": "○ unchanged",
+    "st.hits": "⚠ overlaps {n}",
+    "st.clear": "○ clear",
+    "was": "was {v}",
+
+    "session.title": "Draft and session",
+    "session.restore": "Restore draft",
+    "session.clear": "Clear draft",
+    "session.save": "Download session",
+    "session.load": "Load session",
+    "draft.none": "No draft yet.",
+    "draft.found": "Found an auto-draft for the same source diagram — press “Restore draft”.",
+    "draft.saved": "Draft auto-saved at {time}",
+    "draft.cleared": "Draft cleared.",
+    "draft.failed": "⚠ Could not save draft: {msg}",
+    "draft.restored": "Auto-draft restored.",
+    "draft.restoreFail": "Could not restore draft: {msg}",
+    "session.saved": "Session JSON downloaded.",
+    "session.loaded": "Loaded {name}",
+    "session.loadFail": "Could not load session: {msg}",
+    "session.formatMismatch": "Session format mismatch (expected v{v})",
+    "session.sourceMismatch": "Session belongs to a different source diagram — refused, to avoid applying offsets to the wrong drawing",
+    "session.labelCount": "Station-name count does not match",
+    "session.codeCount": "Station-code count does not match",
+
+    "counts.title": "Overlaps in view",
+    "cnt.nn": "name ↔ name",
+    "cnt.ncSelf": "name ↔ own code",
+    "cnt.ncOther": "name ↔ other code",
+    "cnt.cc": "code ↔ code",
+    "cnt.csOther": "code ↔ other station dot",
+    "cnt.nsOther": "name ↔ other station dot",
+    "cnt.nr": "name ↔ route line",
+    "cnt.npnl": "name ↔ panel",
+    "cnt.cpnl": "code ↔ panel",
+    "cnt.inView": "In view: {names} names / {codes} codes",
+
+    "info.hover": "Hover a station name to see its code and leader.",
+    "moved.count": "  Changed: {names} names, {codes} codes",
+    "desc.orphan": "<b>{text}</b>  No station data behind this text — view only, offsets cannot be computed.",
+    "desc.code": "Code {text} ({owner}) is in quadrant {slot}, was {was}",
+    "desc.main": "<b>{text}</b> ({code})  dx={dx} dy={dy}  anchor={anchor}  angle={angle}  leader {leader}",
+    "desc.codePart": "  code {text} in {slot}",
+    "desc.covered": "  <span class=\"err\">covered by a panel</span>",
+    "sel.noStation": "“{text}” has no station of the same name (under-construction or alias label) — it cannot produce a move row and has been locked.",
+
+    "angle.noRotate": "<b>{text}</b> has no angle to begin with, and this tool does not add one (adding angles is a whole-chain decision)",
+    "angle.caseAngle": "<b>{text}</b> was at {from}°, an angle used nowhere else. Snapped it onto the conventional {to}° first (same tilt, conventional direction); press again to keep stepping, or \\ to return to {orig}°.",
+    "angle.ladderEnd": "<b>{text}</b> is already at the end of the ladder ({a}°)",
+    "angle.pickFirst": "Select a station name first (angles only apply to labels that are already slanted)",
+
+    "export.title": "Move list",
+    "export.copy": "Copy",
+    "export.download": "Download",
+    "export.close": "Close",
+    "export.textLabel": "Move list contents",
+    "pre.pass": "Preflight passed:",
+    "pre.fail": "Cannot download:",
+    "pre.summary": "{names} names, {codes} codes, {angles} angles, {blocks} blocks, {leaders} leaders, {schem} proposal boxes, {lines} new lines",
+    "pre.fingerprint": "Source fingerprint {fp}… / format v{v}",
+    "dl.done": "Downloaded {name}",
+
+    "warn.dupName": "{text} ({code}): another label has the same text; after this move the applier would match the wrong one — row unusable",
+    "warn.tooFar": "{text} ({code}) is {d} units from its station, over the {max} limit — the applier would abort",
+    "warn.veto": "{text} sits on a panel or legend (hard veto)",
+    "warn.codeVeto": "Code {text} sits on a panel or legend (hard veto)",
+    "warn.dupAngle": "{text} ({code}) changed angle, but another label reads “{text}” — an angle table matched by text would abort, row unusable",
+    "warn.blockHits": "{label} overlaps {n}",
+    "warn.schemNoKey": "{label} has no applier key",
+    "warn.moreCrossings": "{n} more name/route crossings than the original",
+
+    "hist.name": "move station name",
+    "hist.code": "move station code",
+    "hist.block": "move block",
+    "hist.leader": "move leader / proposal box",
+    "hist.generic": "edit",
+    "hist.trace": "trace new line",
+    "hist.beforeDraft": "before restoring draft",
+    "hist.beforeSession": "before loading session",
+    "hist.reset": "reset all",
+    "hist.undone": "Undone: {label}",
+    "hist.redone": "Redone: {label}",
+    "hist.undoTip": "Undo: {label}",
+    "hist.redoTip": "Redo: {label}",
+    "hist.noUndo": "Nothing to undo",
+    "hist.noRedo": "Nothing to redo",
+    "reset.done": "All names, codes, blocks, leaders, proposal boxes and new lines restored.",
+
+    "block.title": "Title block",
+    "block.legend": "Legend",
+    "block.construction": "Under construction",
+    "block.outlying": "Outlying services",
+    "block.notes": "Notes",
+
+    "ext.title": "Blocks and leaders",
+    "ext.hintDrag": "drag a block or a leader endpoint",
+    "ext.hintScale": "scale block by 2%",
+    "ext.hintReset": "reset block size",
+    "ext.blocks": "Block",
+    "ext.size": "Size",
+    "ext.hit": "overlap",
+    "ext.ok": "ok",
+    "ext.leadersAdjusted": "{n} leaders adjusted",
+    "ext.totalHits": "Blocks overlap {n} places",
+    "ldr.info": "Leader: label end at ({x},{y}) — drag it to change length and direction",
+
+    "ext2.title": "New lines",
+    "ext2.hint": "start an eight-direction trace",
+    "ext2.colorNote": "colour and line name come from your own data source",
+    "ext2.schem": "Proposal box",
+    "ext2.anchorX": "anchor x",
+    "ext2.linesDrawn": "{n} new lines traced",
+    "ext2.tracing": "tracing: {n} points",
+    "trace.start": "<b>Trace mode</b>  click to drop a vertex (snaps to eight directions)  <b>Backspace</b> undo a point  <b>Enter</b> finish  <b>Esc</b> cancel. Only geometry is captured here.",
+    "trace.done": "Finished a line with {n} vertices. Press <b>L</b> to trace another.",
+    "trace.tooFew": "Fewer than two vertices — cancelled.",
+    "trace.cancelled": "Trace cancelled.",
+    "trace.locked": "The new-line layer is locked. Enable it under “Selectable layers” first."
+  },
+
+  zh: {
+    "lang.group": "介面語言",
+    "app.eyebrow": "路網圖 · 排版工具",
+    "app.title": "路網圖排版微調工具",
+    "badge.offline": "離線",
+    "hint.quick": "拖曳站名、站碼與版面區塊；放開後自動吸附並重新檢查。",
+    "boot.title": "離線地圖載入中",
+    "boot.hint": "大型內嵌 SVG 首次開啟需數秒。地圖會先出現，碰撞檢查在背景完成。",
+    "boot.step.inline": "正在展開內嵌地圖…",
+    "boot.step.outerSize": "正在等待畫布回報真實尺寸…",
+    "boot.step.innerCoords": "正在建立地圖座標系…",
+    "boot.step.index": "正在建立站點與標籤索引…",
+    "boot.err.notSvg": "{path} 裡沒有 <svg>",
+    "boot.err.load": "載入不到 {path}",
+    "boot.err.outerSize": "等不到畫布的真實尺寸（容器 0×0）",
+    "boot.err.innerSize": "等不到內層地圖 SVG 的真實尺寸",
+    "boot.err.ctm": "算不出內層地圖的座標轉換",
+    "boot.loaded": "已載入：站點 {stations}／站名 {labels}／站碼 {codes}／引線 {leaders}／面板 {panels}。滑鼠移到站名上可看它的站碼與引線。",
+    "boot.checking": "地圖已開啟；碰撞檢查正在背景進行，完成後即可匯出。",
+    "boot.exportWhenDone": "背景碰撞檢查完成後即可使用",
+
+    "btn.undo": "↶ 復原",
+    "btn.redo": "↷ 重做",
+    "btn.angleFlat": "↰ 轉平",
+    "btn.angleFlat.title": "＝按鍵 [　往 0° 的方向轉一格",
+    "btn.angleSteep": "↳ 轉斜",
+    "btn.angleSteep.title": "＝按鍵 ]　往最斜的方向轉一格",
+    "btn.fit": "全圖",
+    "btn.export": "匯出搬動清單",
+    "btn.reset": "全部還原",
+
+    "key.drag": "拖曳",
+    "key.wheel": "滾輪", "key.wheel.do": "縮放",
+    "key.space": "空白＋拖曳", "key.space.do": "平移",
+    "key.arrows.do": "微調",
+    "key.esc.do": "取消",
+    "key.trace.do": "描線",
+
+    "dock.aria": "排版工具",
+    "search.title": "搜尋並跳到站點",
+    "search.label": "站名或站碼",
+    "search.placeholder": "例如：Riverside、B03",
+    "search.go": "前往",
+    "search.go.aria": "搜尋站點",
+    "search.empty": "請輸入站名或站碼。",
+    "search.ambiguous": "站碼 {code} 對應 {n} 站：{names}。請選擇「站名｜站碼」。",
+    "search.results": "搜尋結果",
+    "search.notFound": "找不到「{q}」。",
+    "search.went": "已前往 {name}（{code}）",
+
+    "layer.title": "選取圖層",
+    "kind.labels": "站名",
+    "kind.codes": "站碼",
+    "kind.leaders": "引線",
+    "kind.blocks": "區塊",
+    "kind.newlines": "新線",
+    "layer.updated": "圖層設定已更新；未勾選的類別不會被誤拖。",
+
+    "inspector.title": "選取項目",
+    "inspector.empty": "尚未選取。點站名、站碼、引線或區塊查看資料。",
+    "insp.type": "類型", "insp.name": "名稱", "insp.code": "站碼",
+    "insp.offset": "位移", "insp.anchor": "錨點", "insp.angle": "角度",
+    "insp.leader": "引線", "insp.status": "狀態", "insp.quadrant": "象限",
+    "insp.text": "文字", "insp.owner": "所屬", "insp.size": "大小",
+    "insp.endpoint": "端點位移",
+    "type.label": "站名", "type.code": "站碼",
+    "type.block": "版面區塊", "type.leader": "引線",
+    "type.schem": "示意框",
+    "val.yes": "有", "val.no": "無", "val.none": "無",
+    "st.covered": "⚠ 被遮擋",
+    "st.modified": "● 已修改",
+    "st.original": "○ 原始",
+    "st.hits": "⚠ 壓到 {n} 處",
+    "st.clear": "○ 無碰撞",
+    "was": "原 {v}",
+
+    "session.title": "草稿與工作階段",
+    "session.restore": "恢復草稿",
+    "session.clear": "清除草稿",
+    "session.save": "下載工作階段",
+    "session.load": "載入工作階段",
+    "draft.none": "尚無草稿。",
+    "draft.found": "找到相同來源圖的自動草稿，可按「恢復草稿」。",
+    "draft.saved": "草稿已自動保存 {time}",
+    "draft.cleared": "草稿已清除。",
+    "draft.failed": "⚠ 無法保存草稿：{msg}",
+    "draft.restored": "已恢復自動草稿。",
+    "draft.restoreFail": "草稿無法恢復：{msg}",
+    "session.saved": "已下載工作階段 JSON。",
+    "session.loaded": "已載入 {name}",
+    "session.loadFail": "工作階段載入失敗：{msg}",
+    "session.formatMismatch": "工作階段格式不符（需要 v{v}）",
+    "session.sourceMismatch": "來源圖版本不符，為避免套錯位置已拒絕載入",
+    "session.labelCount": "站名數量不符",
+    "session.codeCount": "站碼數量不符",
+
+    "counts.title": "目前視野內重疊數",
+    "cnt.nn": "站名↔站名",
+    "cnt.ncSelf": "站名↔自己站碼",
+    "cnt.ncOther": "站名↔別站站碼",
+    "cnt.cc": "站碼↔站碼",
+    "cnt.csOther": "站碼↔別站圓圈",
+    "cnt.nsOther": "站名↔別站圓圈",
+    "cnt.nr": "站名↔路線",
+    "cnt.npnl": "站名↔面板",
+    "cnt.cpnl": "站碼↔面板",
+    "cnt.inView": "視野內 站名 {names}／站碼 {codes}",
+
+    "info.hover": "滑鼠移到站名上可看它的站碼與引線。",
+    "moved.count": "　已改：站名 {names}　站碼 {codes}",
+    "desc.orphan": "<b>{text}</b>　這個文字沒有對應的站點資料，僅供檢視、不可計算相對位移。",
+    "desc.code": "站碼 {text}（{owner}）目前象限 {slot}，原本 {was}",
+    "desc.main": "<b>{text}</b>（{code}）　dx={dx} dy={dy}　anchor={anchor}　角度={angle}　引線 {leader}",
+    "desc.codePart": "　站碼 {text} 象限 {slot}",
+    "desc.covered": "　<span class=\"err\">被面板／圖例蓋住</span>",
+    "sel.noStation": "「{text}」找不到同名站點（施工中／別名標籤），無法產生搬動清單，已鎖定。",
+
+    "angle.noRotate": "<b>{text}</b> 原本沒有角度，本工具不新增角度（要加角度屬於整段規格化）",
+    "angle.caseAngle": "<b>{text}</b> 原本 {from}° 是全圖唯一的個案角度，先收進慣例的 {to}°（傾斜量不變、方向改成圖上通用的方向），再按可繼續一格一格調；按 \\ 回 {orig}°。",
+    "angle.ladderEnd": "<b>{text}</b> 已經在階梯末端（{a}°）",
+    "angle.pickFirst": "先點一顆站名再按（角度只對原本就斜排的站名有效）",
+
+    "export.title": "搬動清單",
+    "export.copy": "複製",
+    "export.download": "下載清單",
+    "export.close": "關閉",
+    "export.textLabel": "搬動清單內容",
+    "pre.pass": "預檢通過：",
+    "pre.fail": "不可下載：",
+    "pre.summary": "站名 {names}、站碼 {codes}、角度 {angles}、區塊 {blocks}、引線 {leaders}、示意框 {schem}、新線 {lines}",
+    "pre.fingerprint": "來源指紋 {fp}…／格式 v{v}",
+    "dl.done": "已下載 {name}",
+
+    "warn.dupName": "{text}（{code}）有同名標籤，搬完之後套用器會配到另一顆，這一列不可用",
+    "warn.tooFar": "{text}（{code}）離站點 {d} unit，超過 {max} 上限，套用器會中止",
+    "warn.veto": "{text} 落在面板／圖例上（硬否決）",
+    "warn.codeVeto": "站碼 {text} 落在面板／圖例上（硬否決）",
+    "warn.dupAngle": "{text}（{code}）改了角度，但圖上有同名的「{text}」，以文字比對的角度表會中止，這一列不可用",
+    "warn.blockHits": "{label} 壓到 {n} 處",
+    "warn.schemNoKey": "{label} 沒有可套用的資料 key",
+    "warn.moreCrossings": "站名穿線比原圖增加 {n} 處",
+
+    "hist.name": "調整站名",
+    "hist.code": "調整站碼",
+    "hist.block": "調整區塊",
+    "hist.leader": "調整引線／示意框",
+    "hist.generic": "調整",
+    "hist.trace": "描新線",
+    "hist.beforeDraft": "恢復草稿前",
+    "hist.beforeSession": "載入工作階段前",
+    "hist.reset": "全部還原",
+    "hist.undone": "已復原：{label}",
+    "hist.redone": "已重做：{label}",
+    "hist.undoTip": "復原：{label}",
+    "hist.redoTip": "重做：{label}",
+    "hist.noUndo": "沒有可復原的步驟",
+    "hist.noRedo": "沒有可重做的步驟",
+    "reset.done": "所有站名、站碼、區塊、引線、示意框與新線都已還原。",
+
+    "block.title": "標題塊",
+    "block.legend": "圖例",
+    "block.construction": "興建中路線",
+    "block.outlying": "離島交通",
+    "block.notes": "底部說明",
+
+    "ext.title": "區塊與引線",
+    "ext.hintDrag": "搬區塊／引線終點",
+    "ext.hintScale": "區塊放大縮小 2%",
+    "ext.hintReset": "區塊還原大小",
+    "ext.blocks": "區塊",
+    "ext.size": "大小",
+    "ext.hit": "壓到",
+    "ext.ok": "ok",
+    "ext.leadersAdjusted": "引線已調整 {n} 條",
+    "ext.totalHits": "區塊壓到 {n} 處",
+    "ldr.info": "引線：站名端 ({x},{y})　拖它調整長度與方向",
+
+    "ext2.title": "新線",
+    "ext2.hint": "開始八方向描線",
+    "ext2.colorNote": "線色與線名由你自己的資料來源決定",
+    "ext2.schem": "示意框",
+    "ext2.anchorX": "anchor x",
+    "ext2.linesDrawn": "已描新線 {n} 條",
+    "ext2.tracing": "描線中：{n} 點",
+    "trace.start": "<b>描線模式</b>　點一下放折點（自動吸八方向）　<b>Backspace</b> 退一點　<b>Enter</b> 完成　<b>Esc</b> 取消。這裡只描幾何。",
+    "trace.done": "已完成一條，共 {n} 個折點。再按 <b>L</b> 可繼續描下一條。",
+    "trace.tooFew": "折點不足兩個，已取消。",
+    "trace.cancelled": "已取消描線。",
+    "trace.locked": "新線圖層已鎖定，請先在右側「選取圖層」開啟。"
+  }
+};
+
+const LANG_KEY = "transit-label-tuner:lang";
+function pickLang(){
+  const forced = qs.get("lang");
+  if(forced && I18N[forced]) return forced;
+  let saved = null;
+  try{ saved = localStorage.getItem(LANG_KEY); }catch(e){}
+  if(saved && I18N[saved]) return saved;
+  return /^zh/i.test(navigator.language || "") ? "zh" : "en";
+}
+let LANG = pickLang();
+
+/* t("some.key", {a:1}) — missing keys fall back to English, then to the key
+   itself, so a half-finished translation degrades instead of printing blanks. */
+function t(key, params){
+  let s = (I18N[LANG] && I18N[LANG][key]);
+  if(s === undefined) s = (I18N.en[key] !== undefined ? I18N.en[key] : key);
+  if(params) for(const k in params) s = s.split("{"+k+"}").join(String(params[k]));
+  return s;
+}
+
+/* Re-render every translated string in the static markup. Runtime strings
+   (info line, tables, inspector) are refreshed by relabelUI() below. */
+function applyStaticI18n(root){
+  for(const el of (root||document).querySelectorAll("[data-i18n]")){
+    const v = t(el.getAttribute("data-i18n"));
+    if(/[<&]/.test(v)) el.innerHTML = v; else el.textContent = v;
+  }
+  for(const el of (root||document).querySelectorAll("[data-i18n-attr]")){
+    for(const pair of el.getAttribute("data-i18n-attr").split(";")){
+      const i = pair.indexOf(":");
+      if(i < 0) continue;
+      el.setAttribute(pair.slice(0, i).trim(), t(pair.slice(i + 1).trim()));
+    }
+  }
+  /* The dock heading is CSS-generated content, so it is fed through a
+     custom property rather than a data-i18n attribute. */
+  document.documentElement.style.setProperty("--dock-label",
+    JSON.stringify(t("dock.aria")));
+  document.documentElement.lang = (LANG === "zh") ? "zh-Hant" : "en";
+  /* document.title doubles as the ?test= result channel for headless runs —
+     never overwrite a result that has already been published there. */
+  if(!/^RESULT/.test(document.title)) document.title = t("app.title");
+}
+
+/* Hook point: later layers register a callback so switching language redraws
+   the tables and the info line they own. */
+const RELABEL = [];
+function relabelUI(){ for(const fn of RELABEL){ try{ fn(); }catch(e){} } }
+
+function setLang(next){
+  if(!I18N[next]) return;
+  LANG = next;
+  try{ localStorage.setItem(LANG_KEY, next); }catch(e){}
+  applyStaticI18n();
+  for(const b of document.querySelectorAll("#langSwitch button"))
+    b.setAttribute("aria-pressed", String(b.dataset.lang === LANG));
+  relabelUI();
+}
+for(const b of document.querySelectorAll("#langSwitch button"))
+  b.addEventListener("click", ()=> setLang(b.dataset.lang));
+applyStaticI18n();
+for(const b of document.querySelectorAll("#langSwitch button"))
+  b.setAttribute("aria-pressed", String(b.dataset.lang === LANG));
+
+/* =========================== Geometry ==================================
+   Separating-axis overlap test for rotated text boxes, plus a circle-vs-
+   polygon test for station dots. Everything works in *map user units*, not
+   screen pixels, so zooming and panning cannot change a single verdict —
+   the browser and any offline checker always agree.
+   ===================================================================== */
+/* root  = outer <svg>, page layout only.
+   mapEl = inner <svg>; station data-x/data-y and every label x/y live in
+           its coordinate system. The two differ by the inner viewBox scale.
+   All geometry is converted into mapEl units (= the units of dx/dy in the
+   exported move list). Skip the conversion and one screen pixel of drag
+   becomes several units, and the dots stop lining up with the names. */
+let root = null, mapEl = null, mapInv = null, mapCTM = null;
+function userCorners(el){
+  const b = el.getBBox(), m = mapInv.multiply(el.getScreenCTM());
+  const pts=[[b.x,b.y],[b.x+b.width,b.y],[b.x+b.width,b.y+b.height],[b.x,b.y+b.height]];
+  return pts.map(([x,y])=>({x:m.a*x+m.c*y+m.e, y:m.b*x+m.d*y+m.f}));
+}
+function axes(p){const a=[];for(let i=0;i<p.length;i++){const q=p[(i+1)%p.length];
+  const ex=q.x-p[i].x, ey=q.y-p[i].y; const l=Math.hypot(ex,ey)||1; a.push({x:-ey/l,y:ex/l});}return a;}
+function overlap(p1,p2){
+  for(const ax of axes(p1).concat(axes(p2))){
+    let a0=Infinity,a1=-Infinity,b0=Infinity,b1=-Infinity;
+    for(const p of p1){const d=p.x*ax.x+p.y*ax.y;a0=Math.min(a0,d);a1=Math.max(a1,d);}
+    for(const p of p2){const d=p.x*ax.x+p.y*ax.y;b0=Math.min(b0,d);b1=Math.max(b1,d);}
+    if(a1<=b0+0.01||b1<=a0+0.01) return false;
+  }
+  return true;
+}
+function bounds(p){return {x0:Math.min(...p.map(q=>q.x)),x1:Math.max(...p.map(q=>q.x)),
+                           y0:Math.min(...p.map(q=>q.y)),y1:Math.max(...p.map(q=>q.y))};}
+function cheap(a,b){return !(a.b.x1<b.b.x0||b.b.x1<a.b.x0||a.b.y1<b.b.y0||b.b.y1<a.b.y0);}
+function circPoly(c,p){
+  let inside=false;
+  for(let i=0,j=p.length-1;i<p.length;j=i++){
+    if(((p[i].y>c.cy)!==(p[j].y>c.cy)) &&
+       (c.cx<(p[j].x-p[i].x)*(c.cy-p[i].y)/((p[j].y-p[i].y)||1e-9)+p[i].x)) inside=!inside;}
+  if(inside) return true;
+  for(let i=0;i<p.length;i++){
+    const a=p[i], b=p[(i+1)%p.length];
+    const ex=b.x-a.x, ey=b.y-a.y, L2=(ex*ex+ey*ey)||1;
+    let t=((c.cx-a.x)*ex+(c.cy-a.y)*ey)/L2; t=Math.max(0,Math.min(1,t));
+    const dx=a.x+t*ex-c.cx, dy=a.y+t*ey-c.cy;
+    if(dx*dx+dy*dy<=c.r*c.r) return true;}
+  return false;
+}
+
+/* =========================== Model ==================================== */
+const M = {
+  stations: [],        /* {name, code, x, y, r, el} */
+  labels:   [],        /* station-name labels */
+  codes:    [],        /* station-code labels */
+  panels:   [],        /* panels / cards / legend (frozen at load) */
+  byKey:    new Map(), /* "name|code"                 -> label */
+  codeByKey:new Map(), /* "name|data-code|code text"  -> code  */
+  undo:     []
+};
+
+function num(el, k, d){ const v = el.getAttribute(k); const f = parseFloat(v); return isNaN(f)? d : f; }
+function fmt(v){ const r = Math.round(v); return Math.abs(v-r)<1e-6 ? String(r) : (Math.round(v*10)/10).toFixed(1); }
+
+function parseRotate(el){
+  const t = el.getAttribute("transform") || "";
+  const m = /rotate\(\s*(-?[\d.]+)[\s,]+(-?[\d.]+)[\s,]+(-?[\d.]+)\s*\)/.exec(t);
+  return m ? {a:parseFloat(m[1]), cx:parseFloat(m[2]), cy:parseFloat(m[3])} : null;
+}
+
+function buildModel(){
+  /* --- stations: data-x/data-y are authoritative, not the rendered circle --- */
+  for(const el of root.querySelectorAll(SEL.station)){
+    let r = 0;
+    for(const c of el.querySelectorAll("circle")) r = Math.max(r, parseFloat(c.getAttribute("r"))||0);
+    if(!(r>0)) r = 10.2;                       /* dots drawn as <path> get the house default */
+    M.stations.push({el, name: el.getAttribute("data-name")||"", code: el.getAttribute("data-code")||"",
+                     x: num(el,"data-x",0), y: num(el,"data-y",0), r});
+  }
+  const byName = new Map();
+  for(const s of M.stations){ if(!byName.has(s.name)) byName.set(s.name, []); byName.get(s.name).push(s); }
+
+  /* --- names: a label belongs to the nearest station sharing its text.
+         This mirrors how a downstream applier finds the element again, so
+         what you see here is what it will move. --- */
+  for(const el of root.querySelectorAll(SEL.label)){
+    const t = el.textContent;
+    const x = num(el,"x",0), y = num(el,"y",0);
+    const cands = byName.get(t) || [];
+    let st = null, bd = Infinity;
+    for(const s of cands){ const d = Math.hypot(s.x-x, s.y-y); if(d<bd){bd=d; st=s;} }
+    const rot = parseRotate(el);
+    const L = {el, text:t, st, dist:bd,
+               x, y, x0:x, y0:y,
+               anchor: el.getAttribute("text-anchor") || "start",
+               anchor0: el.getAttribute("text-anchor") || "start",
+               rot: rot? rot.a : null, rot0: rot? rot.a : null,
+               hasRot: !!rot, ldr:null, code:null, veto:false};
+    M.labels.push(L);
+    if(st) M.byKey.set(t+"|"+st.code, L);
+  }
+
+  /* --- station codes --- */
+  for(const g of root.querySelectorAll(SEL.codeGroup)){
+    const name = g.getAttribute("data-name")||"", dcode = g.getAttribute("data-code")||"";
+    const sx = num(g,"data-station-x",NaN), sy = num(g,"data-station-y",NaN);
+    for(const el of g.querySelectorAll("text")){
+      const C = {el, g, name, dcode, text: el.textContent, sx, sy,
+                 x: num(el,"x",0), y: num(el,"y",0), x0: num(el,"x",0), y0: num(el,"y",0),
+                 anchor: el.getAttribute("text-anchor")||"start",
+                 anchor0: el.getAttribute("text-anchor")||"start",
+                 grabbed:false, veto:false};
+      C.slot0 = slotOf(C.x0-sx, C.y0-sy, C.anchor0);
+      M.codes.push(C);
+      M.codeByKey.set(name+"|"+dcode+"|"+C.text, C);
+    }
+  }
+  /* name <-> code: same station */
+  const codeByStn = new Map();
+  for(const c of M.codes) codeByStn.set(c.name+"|"+c.dcode, c);
+  for(const L of M.labels) if(L.st) L.code = codeByStn.get(L.st.name+"|"+L.st.code) || null;
+
+  /* --- leaders: x1,y1 must sit on the station, x2,y2 near the label's
+         original position. Bound **at load time** — once a name has been
+         dragged away, the pairing can no longer be recovered. --- */
+  const leaders = [...root.querySelectorAll(SEL.leader)].map(el=>({el,
+    x1:num(el,"x1",0), y1:num(el,"y1",0), x2:num(el,"x2",0), y2:num(el,"y2",0)}));
+  for(const L of M.labels){
+    if(!L.st) continue;
+    let best=null, bd=Infinity;
+    for(const g of leaders){
+      if(Math.hypot(g.x1-L.st.x, g.y1-L.st.y) > CONFIG.limits.leaderStationEnd) continue;
+      const d = Math.hypot(g.x2-L.x0, g.y2-L.y0);
+      if(d < CONFIG.limits.leaderLabelEnd && d < bd){ bd=d; best=g; }
+    }
+    if(best){ best.x20=best.x2; best.y20=best.y2; L.ldr=best; }
+  }
+
+  /* --- panels / cards / legend: any filled rect smaller than
+         limits.panelAreaRatio of the canvas. **Computed once at load and
+         then frozen**: the ratio only holds while the whole SVG is scaled
+         uniformly, so recomputing after a zoom would let the browser and an
+         offline checker disagree about what is covered. --- */
+  const _svgRect = root.getBoundingClientRect();
+  const _svgArea = Math.max(1, _svgRect.width*_svgRect.height);
+  for(const el of root.querySelectorAll("rect")){
+    const r = el.getBoundingClientRect();
+    const fill = el.getAttribute("fill")||"";
+    const area = r.width*r.height;
+    if(fill==="none" || !(area>0) || area >= CONFIG.limits.panelAreaRatio*_svgArea) continue;
+    /* screen rect -> map coordinates (frozen) */
+    const c = [[r.left,r.top],[r.right,r.top],[r.right,r.bottom],[r.left,r.bottom]]
+      .map(([x,y])=>{ const p = root.createSVGPoint(); p.x=x; p.y=y;
+                      const q = p.matrixTransform(mapInv); return {x:q.x, y:q.y}; });
+    M.panels.push({el, fill, p:c, b:bounds(c)});
+  }
+}
+
+/* Flag everything that already sits on a panel. On a dense diagram this is
+   thousands of objects against hundreds of panels; running it synchronously
+   before removing the boot overlay looks like a hang, so yield a frame every
+   64 items and let the map be usable while it finishes. */
+/* Yield to the browser for one frame. requestAnimationFrame alone is not
+   enough: a headless renderer or a backgrounded tab may throttle it to zero,
+   and anything awaiting it then never resumes. Race it against a timer so
+   progress is guaranteed either way. */
+function nextFrame(){
+  return new Promise(res=>{
+    let done = false;
+    const go = ()=>{ if(!done){ done = true; res(); } };
+    requestAnimationFrame(go);
+    setTimeout(go, 32);
+  });
+}
+async function vetoAllAsync(){
+  const all = M.labels.concat(M.codes);
+  for(let i=0;i<all.length;i++){
+    checkVeto(all[i]);
+    if(i && i%64===0) await nextFrame();
+  }
+}
+/* Synchronous variant, for restoring a state where the caller needs the veto
+   flags to be correct before it repaints. */
+function vetoAll(){ for(const o of M.labels.concat(M.codes)) checkVeto(o); }
+
+function slotOf(dx, dy, anchor){
+  for(const k in SLOTS){
+    const s = SLOTS[k];
+    if(Math.abs(dx-s[0])<0.05 && Math.abs(dy-s[1])<0.05 && anchor===s[2]) return k;
+  }
+  return "custom";   /* not one of the eight slots — kept verbatim in exports */
+}
+function nearestSlot(dx, dy){
+  let best=null, bd=Infinity;
+  for(const k in SLOTS){
+    const s = SLOTS[k], d = Math.hypot(dx-s[0], dy-s[1]);
+    if(d < bd){ bd=d; best=k; }
+  }
+  return best;
+}
+
+/* =========================== Writing positions ======================== */
+function writeLabel(L){
+  L.el.setAttribute("x", fmt(L.x));
+  L.el.setAttribute("y", fmt(L.y));
+  L.el.setAttribute("text-anchor", L.anchor);
+  if(L.hasRot) L.el.setAttribute("transform", "rotate("+fmt(L.rot)+" "+fmt(L.x)+" "+fmt(L.y)+")");
+  if(L.ldr){                      /* the leader's label end follows the label */
+    L.ldr.el.setAttribute("x2", fmt(L.ldr.x20 + (L.x - L.x0)));
+    L.ldr.el.setAttribute("y2", fmt(L.ldr.y20 + (L.y - L.y0)));
+  }
+  L.el.classList.toggle("dt-moved", isMoved(L));
+  checkVeto(L);
+  if(typeof EXT_OBS!=="undefined") EXT_OBS=null;
+}
+function writeCode(C){
+  C.el.setAttribute("x", fmt(C.x));
+  C.el.setAttribute("y", fmt(C.y));
+  C.el.setAttribute("text-anchor", C.anchor);
+  C.el.classList.toggle("dt-moved", codeSlot(C)!==C.slot0);
+  checkVeto(C);
+  if(typeof EXT_OBS!=="undefined") EXT_OBS=null;
+}
+function isMoved(L){
+  return Math.abs(L.x-L.x0)>1e-6 || Math.abs(L.y-L.y0)>1e-6 ||
+         L.anchor!==L.anchor0 || (L.rot||0)!==(L.rot0||0);
+}
+function codeSlot(C){ return slotOf(C.x-C.sx, C.y-C.sy, C.anchor); }
+
+/* =========================== Angles ====================================
+   Slanted labels may only sit on CONFIG.snapAngles. Angles that exist in the
+   artwork but are deliberately left out of the ladder (a one-off 40°, say)
+   are not snap targets and are never pulled onto the ladder silently — the
+   tool says so in the info line first. The one exception is \ , which puts a
+   label back to its original angle; that restores, it does not invent.
+
+   Only labels that are *already* rotated can be stepped. Adding an angle to
+   a horizontal label changes the character of the whole chain, so it is a
+   deliberate design decision, not something a drag should do — and most
+   appliers refuse a rotate that was not there before.
+
+   Angle changes export as their own rows, separate from position moves, so
+   "drag it, then straighten it" produces two independent edits that cannot
+   overwrite one another.
+   ===================================================================== */
+/* Folding an off-ladder angle onto the ladder: pick the rung with the
+   closest *tilt magnitude*; on a tie take the steeper one. So +40° becomes
+   −40° (same tilt, conventional direction) and 78° becomes −70°. */
+function snapIntoLadder(a){
+  let best = null, bd = Infinity;
+  for(const s of SNAP_ANGLES){
+    const d = Math.abs(Math.abs(s) - Math.abs(a));
+    if(d < bd - 1e-9 || (Math.abs(d - bd) < 1e-9 && Math.abs(s) > Math.abs(best))){ bd = d; best = s; }
+  }
+  return best;
+}
+function setAngle(L, ang){
+  if(!L.hasRot) throw new Error(L.text+" has no angle; this tool does not add one");
+  if(SNAP_ANGLES.indexOf(ang)<0 && ang!==L.rot0)
+    throw new Error("Angle "+ang+" is not in the snap set "+SNAP_ANGLES);
+  pushUndo(); L.rot = ang; writeLabel(L);
+  scheduleCount(); updateMovedCount(); describe(L, L.code);
+  return L.rot;
+}
+function stepAngle(L, dir, absolute){
+  if(!L.hasRot){
+    setInfo(t("angle.noRotate", {text:L.text}), true);
+    return null;
+  }
+  if(absolute !== null && absolute !== undefined){ return setAngle(L, absolute); }
+  const i = SNAP_ANGLES.indexOf(L.rot);
+  if(i < 0){
+    /* An off-ladder one-off angle. Folding it onto the ladder is an
+       improvement, not a violation, so allow it — but say so, and keep the
+       tilt magnitude identical rather than rotating to something arbitrary.
+       \ returns to the original angle at any time. */
+    const snapped = snapIntoLadder(L.rot);
+    setInfo(t("angle.caseAngle", {text:L.text, from:fmt(L.rot),
+                                  to:fmt(snapped), orig:fmt(L.rot0)}));
+    return setAngle(L, snapped);
+  }
+  const j = i + dir;
+  if(j < 0 || j >= SNAP_ANGLES.length){
+    setInfo(t("angle.ladderEnd", {text:L.text, a:fmt(L.rot)}), true);
+    return null;
+  }
+  return setAngle(L, SNAP_ANGLES[j]);
+}
+
+/* Hard veto against panels: turns red the moment it is dragged onto one */
+function checkVeto(o){
+  const p = userCorners(o.el), b = bounds(p);
+  let hit = false;
+  for(const q of M.panels){ if(!(b.x1<q.b.x0||q.b.x1<b.x0||b.y1<q.b.y0||q.b.y1<b.y0) && overlap(p,q.p)){ hit=true; break; } }
+  o.veto = hit;
+  o.el.classList.toggle("dt-veto", hit);
+  return hit;
+}
+
+/* =========================== Zoom and pan ============================= */
+/* Zooming sets the SVG element's CSS width — a uniform scale of the whole
+   drawing. The viewBox is never touched, so getScreenCTM() stays correct
+   for free and no geometry has to be re-derived. */
+let VB = {w:1684, h:1188}, baseW = 1684, zoom = 1, panX = 0, panY = 0;
+function applyView(){
+  root.style.width = (baseW*zoom)+"px";
+  root.style.height = "auto";
+  host.style.transform = "translate("+panX+"px,"+panY+"px)";
+  syncCTM();
+}
+function syncCTM(){ mapCTM = mapEl.getScreenCTM(); mapInv = mapCTM.inverse(); }
+function fitAll(){
+  const r = stage.getBoundingClientRect();
+  /* Fit into the space the side dock leaves, not the whole stage — otherwise
+     "Fit" hides a fifth of the diagram underneath the panel. On narrow
+     viewports the dock moves to the bottom, so only inset when it is
+     genuinely docked to the right. */
+  const d = $("#rightDock").getBoundingClientRect();
+  const inset = (d.width > 0 && d.left > r.width * 0.5) ? (r.width - d.left) + 16 : 0;
+  const availW = Math.max(240, r.width - inset);
+  zoom = Math.min(availW/baseW, r.height/(baseW*VB.h/VB.w)) * 0.98;
+  panX = (availW - baseW*zoom)/2; panY = (r.height - baseW*zoom*VB.h/VB.w)/2;
+  applyView(); scheduleCount();
+}
+stage.addEventListener("wheel", e=>{
+  e.preventDefault();
+  const r = stage.getBoundingClientRect();
+  const mx = e.clientX-r.left, my = e.clientY-r.top;
+  const k = Math.exp(-e.deltaY*0.0015), nz = Math.max(0.1, Math.min(40, zoom*k)), f = nz/zoom;
+  panX = mx - (mx-panX)*f; panY = my - (my-panY)*f; zoom = nz;
+  applyView(); scheduleCount();
+}, {passive:false});
+
+let panning = null, spaceDown = false;
+stage.addEventListener("mousedown", e=>{
+  if(e.button===1 || (e.button===0 && (spaceDown || !e.target.closest("text")))){
+    panning = {x:e.clientX, y:e.clientY, px:panX, py:panY};
+    stage.classList.add("panning"); e.preventDefault();
+  }
+});
+
+/* =========================== Dragging ================================= */
+let drag = null, sel = null;
+
+function snapshot(){
+  return {labels: M.labels.map(L=>({L, x:L.x, y:L.y, anchor:L.anchor, rot:L.rot})),
+          codes:  M.codes.map(C=>({C, x:C.x, y:C.y, anchor:C.anchor, grabbed:C.grabbed}))};
+}
+function pushUndo(){ M.undo.push(snapshot()); if(M.undo.length>200) M.undo.shift(); }
+function restore(s){
+  for(const r of s.labels){ r.L.x=r.x; r.L.y=r.y; r.L.anchor=r.anchor; r.L.rot=r.rot; writeLabel(r.L); }
+  for(const r of s.codes){ r.C.x=r.x; r.C.y=r.y; r.C.anchor=r.anchor; r.C.grabbed=r.grabbed; writeCode(r.C); }
+  scheduleCount(); updateMovedCount();
+}
+
+/* screen pixels -> map units (includes the inner viewBox scale) */
+function userScale(){ syncCTM(); return Math.hypot(mapCTM.a, mapCTM.b); }
+
+host.addEventListener("mousedown", e=>{
+  if(e.button!==0 || spaceDown) return;
+  const tg = e.target;
+  let obj = null, kind = null;
+  if(tg.matches(SEL.label)){ obj = M.labels.find(L=>L.el===tg); kind="name"; }
+  else if(tg.closest(SEL.codeGroup) && tg.tagName.toLowerCase()==="text"){
+    obj = M.codes.find(C=>C.el===tg); kind="code";
+  }
+  if(!obj) return;
+  if(kind==="name" && !obj.st){ setInfo(t("sel.noStation", {text:obj.text}), true); return; }
+  e.preventDefault(); e.stopPropagation();
+  pushUndo();
+  select(kind==="name"? obj : (obj.g && M.labels.find(L=>L.code===obj)) || null, obj, kind);
+  drag = {obj, kind, sx:e.clientX, sy:e.clientY, ox:obj.x, oy:obj.y,
+          ghost: (kind==="name" && obj.code) ? {C:obj.code, x:obj.code.x, y:obj.code.y} : null};
+});
+
+window.addEventListener("mousemove", e=>{
+  if(panning){
+    panX = panning.px + (e.clientX-panning.x); panY = panning.py + (e.clientY-panning.y);
+    applyView(); return;
+  }
+  if(!drag) return;
+  const k = userScale();
+  const dx = (e.clientX-drag.sx)/k, dy = (e.clientY-drag.sy)/k;
+  drag.obj.x = drag.ox + dx; drag.obj.y = drag.oy + dy;
+  if(drag.kind==="name"){
+    writeLabel(drag.obj);
+    /* The code tags along during the drag so it reads as one unit, then
+       snaps back to its own quadrant on release: a code's position is an
+       independent decision and must not drift just because the name moved. */
+    if(drag.ghost){ drag.ghost.C.el.setAttribute("transform","translate("+fmt(dx)+","+fmt(dy)+")"); }
+  } else writeCode(drag.obj);
+});
+
+window.addEventListener("mouseup", ()=>{
+  if(panning){ panning=null; stage.classList.remove("panning"); scheduleCount(); }
+  if(!drag) return;
+  const o = drag.obj;
+  if(drag.kind==="name"){
+    /* Snap the *offset* to whole units while keeping the original fractional
+       baseline, so a label that started at -9.9 and is nudged +18 lands on
+       8.1 rather than being rounded to 8. */
+    o.x = o.x0 + Math.round(o.x - o.x0);
+    o.y = o.y0 + Math.round(o.y - o.y0);
+    writeLabel(o);
+    if(drag.ghost) drag.ghost.C.el.removeAttribute("transform");
+  }else{
+    /* codes snap to the nearest legal quadrant */
+    const s = SLOTS[nearestSlot(o.x-o.sx, o.y-o.sy)];
+    o.x = o.sx + s[0]; o.y = o.sy + s[1]; o.anchor = s[2];
+    o.grabbed = true;                     /* only hand-grabbed codes are exported */
+    writeCode(o);
+  }
+  drag = null; scheduleCount(); updateMovedCount(); describe();
+});
+
+/* hover -> highlight the name, its code and its leader together */
+host.addEventListener("mouseover", e=>{
+  const tg = e.target;
+  let L = null;
+  if(tg.matches(SEL.label)) L = M.labels.find(x=>x.el===tg);
+  else if(tg.closest(SEL.codeGroup) && tg.tagName.toLowerCase()==="text"){
+    const C = M.codes.find(x=>x.el===tg); L = C ? M.labels.find(x=>x.code===C) : null;
+    if(C) hot(L, C);
+    return;
+  }
+  if(L) hot(L, L.code);
+});
+host.addEventListener("mouseout", ()=>unhot());
+let hotSet = [];
+function hot(L, C){
+  unhot();
+  if(L){ L.el.classList.add("dt-hot"); hotSet.push([L.el,"dt-hot"]);
+         if(L.ldr){ L.ldr.el.classList.add("dt-hot-ldr"); hotSet.push([L.ldr.el,"dt-hot-ldr"]); } }
+  if(C){ C.el.classList.add("dt-hot"); hotSet.push([C.el,"dt-hot"]); }
+  describe(L, C);
+}
+function unhot(){ for(const [el,c] of hotSet) el.classList.remove(c); hotSet=[]; }
+
+function select(L, obj, kind){
+  if(sel) sel.el.classList.remove("dt-sel");
+  sel = obj; obj.el.classList.add("dt-sel"); sel._kind = kind;
+}
+
+window.addEventListener("keydown", e=>{
+  if(e.target && e.target.closest && e.target.closest("input,textarea")) return;
+  if(e.code==="Space"){ spaceDown = true; }
+  if(e.key==="Escape"){ if(sel){ sel.el.classList.remove("dt-sel"); sel=null; } }
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="z"){
+    e.preventDefault(); const s = M.undo.pop(); if(s) restore(s); return;
+  }
+  const d = {ArrowLeft:[-1,0], ArrowRight:[1,0], ArrowUp:[0,-1], ArrowDown:[0,1]}[e.key];
+  if(d && sel){
+    e.preventDefault(); pushUndo();
+    sel.x += d[0]; sel.y += d[1];
+    if(sel._kind==="name") writeLabel(sel);
+    else { const s = SLOTS[nearestSlot(sel.x-sel.sx, sel.y-sel.sy)];
+           sel.x = sel.sx+s[0]; sel.y = sel.sy+s[1]; sel.anchor = s[2]; sel.grabbed = true; writeCode(sel); }
+    scheduleCount(); updateMovedCount(); describe();
+  }
+  /* Angles: [ flattens, ] steepens, \ returns to the original. Only labels
+     that already carry a rotate() can be stepped — see the Angles section. */
+  if(sel && sel._kind==="name" && (e.key==="[" || e.key==="]" || e.key==="\\")){
+    e.preventDefault();
+    if(e.key==="\\") stepAngle(sel, 0, sel.rot0);
+    else stepAngle(sel, e.key==="]" ? +1 : -1, null);
+  }
+});
+window.addEventListener("keyup", e=>{ if(e.code==="Space") spaceDown=false; });
+
+/* =========================== Overlap counts ===========================
+   Same categories and same verdicts an offline checker would produce. Only
+   what is in view is counted, so the numbers move as you pan — that is the
+   point: they are a live readout, not a report.
+
+   Codes stacked at the same interchange are excluded on purpose; they are a
+   drawing convention, not a collision.
+   ===================================================================== */
+let countTimer = null;
+function scheduleCount(){ clearTimeout(countTimer); countTimer = setTimeout(recount, 160); }
+function viewportUser(){
+  const r = stage.getBoundingClientRect();
+  const p1 = root.createSVGPoint(); p1.x=r.left; p1.y=r.top;
+  const p2 = root.createSVGPoint(); p2.x=r.right; p2.y=r.bottom;
+  const a = p1.matrixTransform(mapInv), b = p2.matrixTransform(mapInv);
+  return {x0:Math.min(a.x,b.x), x1:Math.max(a.x,b.x), y0:Math.min(a.y,b.y), y1:Math.max(a.y,b.y)};
+}
+function recount(){
+  syncCTM();
+  const V = viewportUser();
+  const inV = o => !(o.b.x1<V.x0||V.x1<o.b.x0||o.b.y1<V.y0||V.y1<o.b.y0);
+  const names = [], codes = [], stns = [];
+  for(const L of M.labels){ const p=userCorners(L.el); const o={t:L.text,el:L.el,p,b:bounds(p)}; if(inV(o)) names.push(o); }
+  for(const C of M.codes){ const p=userCorners(C.el);
+    const o={t:C.text,owner:C.name,sx:C.sx,sy:C.sy,p,b:bounds(p)}; if(inV(o)) codes.push(o); }
+  for(const s of M.stations){ const o={name:s.name,code:s.code,x:s.x,y:s.y,cx:s.x,cy:s.y,r:s.r,
+      b:{x0:s.x-s.r,x1:s.x+s.r,y0:s.y-s.r,y1:s.y+s.r}}; if(inV(o)) stns.push(o); }
+  const coloc=(a,b)=>Math.hypot(a.sx-b.sx,a.sy-b.sy)<6;
+  let nn=0,ncSelf=0,ncOther=0,cc=0,csOther=0,nsOther=0,npnl=0,cpnl=0,nr=0,nrPoints=0;
+  for(let i=0;i<names.length;i++)for(let j=i+1;j<names.length;j++)
+    if(cheap(names[i],names[j])&&overlap(names[i].p,names[j].p)) nn++;
+  for(const a of names)for(const c of codes)
+    if(cheap(a,c)&&overlap(a.p,c.p)){ if(a.t===c.owner) ncSelf++; else ncOther++; }
+  for(let i=0;i<codes.length;i++)for(let j=i+1;j<codes.length;j++)
+    if(cheap(codes[i],codes[j])&&overlap(codes[i].p,codes[j].p)&&!coloc(codes[i],codes[j])) cc++;
+  for(const c of codes)for(const s of stns){
+    if(Math.hypot(c.sx-s.x,c.sy-s.y)<6) continue;
+    if(cheap(c,s)&&circPoly(s,c.p)) csOther++; }
+  for(const a of names)for(const s of stns){
+    if(a.t===s.name) continue;
+    if(cheap(a,s)&&circPoly(s,a.p)) nsOther++; }
+  for(const a of names)for(const q of M.panels){ if(cheap(a,q)&&overlap(a.p,q.p)){ npnl++; break; } }
+  for(const c of codes)for(const q of M.panels){ if(cheap(c,q)&&overlap(c.p,q.p)){ cpnl++; break; } }
+  /* name-vs-route test: nine sample points (four corners, four edge
+     midpoints, the centre). Three or more inside the stroke means the line
+     runs through the text; one or two is a corner graze, not a defect. */
+  const screenCorners=el=>{
+    const b=el.getBBox(),m=el.getScreenCTM(),p=[[b.x,b.y],[b.x+b.width,b.y],
+      [b.x+b.width,b.y+b.height],[b.x,b.y+b.height]];
+    return p.map(([x,y])=>({x:m.a*x+m.c*y+m.e,y:m.b*x+m.d*y+m.f}));
+  };
+  const routes=[...mapEl.querySelectorAll(SEL.route)].map(el=>{
+    const r=el.getBoundingClientRect();
+    return {el,inv:el.getScreenCTM().inverse(),b:{x0:r.left,x1:r.right,y0:r.top,y1:r.bottom}};
+  });
+  const mid=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});
+  for(const a of names){
+    const p=screenCorners(a.el), b=bounds(p);
+    const pts=[p[0],p[1],p[2],p[3],mid(p[0],p[1]),mid(p[1],p[2]),
+      mid(p[2],p[3]),mid(p[3],p[0]),{x:(p[0].x+p[2].x)/2,y:(p[0].y+p[2].y)/2}];
+    let hits=0;
+    for(const q of pts){
+      const sp=root.createSVGPoint();sp.x=q.x;sp.y=q.y;
+      for(const r of routes){
+        if(r.b.x1<b.x0||b.x1<r.b.x0||r.b.y1<b.y0||b.y1<r.b.y0) continue;
+        if(r.el.isPointInStroke(sp.matrixTransform(r.inv))){hits++;break;}
+      }
+    }
+    nrPoints+=hits;if(hits>=3) nr++;
+  }
+  const rows = [["cnt.nn",nn,0],["cnt.ncSelf",ncSelf,0],["cnt.ncOther",ncOther,0],
+                ["cnt.cc",cc,0],["cnt.csOther",csOther,0],["cnt.nsOther",nsOther,0],
+                ["cnt.nr",nr,1],["cnt.npnl",npnl,1],["cnt.cpnl",cpnl,1]];
+  $("#countTable").innerHTML = rows.map(([k,v,hard])=>
+    "<tr><td>"+t(k)+"</td><td class="+((hard&&v)?'"warn"':'""')+">"+v+"</td></tr>").join("")
+    + '<tr><td colspan="2" style="color:#777;padding-top:4px">'
+    + t("cnt.inView", {names:names.length, codes:codes.length}) + '</td></tr>';
+  window.__counts = {nn,ncSelf,ncOther,cc,csOther,nsOther,nr,nrPoints,npnl,cpnl,
+                     nName:names.length,nCode:codes.length};
+}
+RELABEL.push(()=>{ if(mapCTM) recount(); });
+
+/* =========================== Info line ================================ */
+function setInfo(html, err){ $("#info").innerHTML = err? '<span class="err">'+html+'</span>' : html; }
+function describe(L, C){
+  const o = L || (sel && sel._kind==="name" ? sel : null);
+  if(!o){ if(C) setInfo(t("desc.code", {text:C.text, owner:C.name,
+                                        slot:codeSlot(C), was:C.slot0})); return; }
+  if(!o.st){ setInfo(t("desc.orphan", {text:o.text}), true); return; }
+  const dx = o.x-o.st.x, dy = o.y-o.st.y;
+  setInfo(t("desc.main", {text:o.text, code:o.st.code, dx:fmt(dx), dy:fmt(dy),
+                          anchor:o.anchor,
+                          angle:(o.hasRot? fmt(o.rot)+"°" : t("val.none")),
+                          leader:(o.ldr? t("val.yes") : t("val.no"))})
+    + (o.code? t("desc.codePart", {text:o.code.text, slot:codeSlot(o.code)}) : "")
+    + (o.veto? t("desc.covered") : ""));
+}
+function updateMovedCount(){
+  const n = M.labels.filter(isMoved).length;
+  const c = M.codes.filter(C=>C.grabbed && codeSlot(C)!==C.slot0).length;
+  $("#movedCount").textContent = t("moved.count", {names:n, codes:c});
+}
+RELABEL.push(()=>{ if(M.labels.length) updateMovedCount(); });
+
+/* =========================== Export =================================== */
+function exportRows(){
+  const nameRows = [], codeRows = [], angleRows = [], warn = [];
+  /* A downstream applier finds a label by "same text, nearest to this
+     station". When two stations share a name, dragging one far enough can
+     make the *other* label the nearer match — and the applier would then
+     silently move the wrong one. Catch that here instead. */
+  const sameText = new Map();
+  for(const L of M.labels){ if(!sameText.has(L.text)) sameText.set(L.text, []); sameText.get(L.text).push(L); }
+
+  for(const L of M.labels){
+    if(!isMoved(L) || !L.st) continue;
+    const dx = L.x - L.st.x, dy = L.y - L.st.y;
+    const peers = sameText.get(L.text);
+    if(peers.length > 1){
+      let best = null, bd = Infinity;
+      for(const p of peers){ const d = Math.hypot(p.x-L.st.x, p.y-L.st.y); if(d < bd){ bd = d; best = p; } }
+      if(best !== L)
+        warn.push(t("warn.dupName", {text:L.text, code:L.st.code}));
+    }
+    if(Math.hypot(dx, dy) > CONFIG.limits.maxOffset)
+      warn.push(t("warn.tooFar", {text:L.text, code:L.st.code,
+                                  d:fmt(Math.hypot(dx,dy)), max:CONFIG.limits.maxOffset}));
+    /* The angle column exists to *preserve* the original angle, so it is
+       always filled in — None when there is no transform. Writing 0 instead
+       makes an applier that compares this column with the file abort. */
+    nameRows.push({text:L.text, station:L.st.name, code:L.st.code,
+                   dx:+dx.toFixed(4), dy:+dy.toFixed(4), anchor:L.anchor,
+                   rot: L.hasRot? L.rot0 : null, ldr: !!L.ldr,
+                   why: "label tuner "+stamp()});
+    if(L.hasRot && L.rot!==L.rot0){
+      /* Angle changes are matched by label text alone, so a duplicated name
+         cannot be targeted unambiguously. Flag it and keep the row visible
+         rather than dropping it — the user should know why it is excluded. */
+      const dup = peers.length > 1;
+      if(dup) warn.push(t("warn.dupAngle", {text:L.text, code:L.st.code}));
+      angleRows.push({text:L.text, code:L.st.code, from:L.rot0, to:L.rot, dup:dup,
+                      why:"label tuner "+stamp()});
+    }
+    if(L.veto) warn.push(t("warn.veto", {text:L.text}));
+  }
+  for(const C of M.codes){
+    if(!C.grabbed) continue;
+    const s = codeSlot(C);
+    if(s===C.slot0) continue;
+    codeRows.push({name:C.name, gcode:C.dcode, text:C.text, slot:s, was:C.slot0,
+                   why:"label tuner "+stamp()});
+    if(C.veto) warn.push(t("warn.codeVeto", {text:C.text}));
+  }
+  return {nameRows, codeRows, angleRows, warn};
+}
+function stamp(){
+  const d = new Date();
+  return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
+}
+function py(s){ return '"'+String(s).replace(/\\/g,"\\\\").replace(/"/g,'\\"')+'"'; }
+/* The move list is a machine artifact for your own generator, so it stays in
+   English regardless of the interface language. Format: Python-style tuple
+   rows, one section per kind of edit. See README.md § Move list format. */
+function exportText(){
+  const R = exportRows();
+  const out = [];
+  out.push("# Move list — exported by Transit Label Tuner");
+  out.push("# source diagram : " + SVG_PATH.split("/").pop());
+  out.push("# format version : " + PANEL_FORMAT_VERSION);
+  out.push("# source SHA-256 : " + SOURCE_FINGERPRINT);
+  out.push("# If a label already has a NAME_MOVES row, EDIT that row — do not add a second one.");
+  out.push("#   Two NAME_MOVES rows for one label: a strict applier aborts.");
+  out.push("#   Two CODE_NUDGES rows for one code: the later row silently wins.");
+  if(R.warn.length){ out.push("# !! unresolved:"); for(const w of R.warn) out.push("#    "+w); }
+  out.push("");
+  out.push("# ---- NAME_MOVES (label text, station name, station code, dx, dy, anchor, angle, has leader, why) ----");
+  for(const r of R.nameRows)
+    out.push("    ("+py(r.text)+", "+py(r.station)+", "+py(r.code)+", "+fmt(r.dx)+", "+fmt(r.dy)
+             +", "+py(r.anchor)+", "+(r.rot===null? "None" : fmt(r.rot))+", "+(r.ldr?"True":"False")
+             +",\n     "+py(r.why)+"),");
+  if(!R.nameRows.length) out.push("    # (none)");
+  out.push("");
+  out.push("# ---- CODE_NUDGES (station name, group data-code, code text, new quadrant, old quadrant, why) ----");
+  for(const r of R.codeRows)
+    out.push("    ("+py(r.name)+", "+py(r.gcode)+", "+py(r.text)+", "+py(r.slot)+", "+py(r.was)
+             +", "+py(r.why)+"),");
+  if(!R.codeRows.length) out.push("    # (none)");
+  if(R.angleRows.length){
+    const ok = R.angleRows.filter(r=>!r.dup), bad = R.angleRows.filter(r=>r.dup);
+    out.push("");
+    out.push("# ---- CHAIN_ANGLES (chain name, [labels...], old angle, new angle, why) ----");
+    out.push("#      Angle changes live here, NOT in NAME_MOVES: that column preserves the");
+    out.push("#      original angle, and writing a new value there makes an applier abort on");
+    out.push("#      \"table says X, file says Y\". A single-member row rotates one label and");
+    out.push("#      touches nothing else, so the same label may legitimately appear in both");
+    out.push("#      NAME_MOVES (moved) and here (rotated).");
+    for(const r of ok)
+      out.push("    ("+py(r.text+" "+r.code+" single")+", ["+py(r.text)+"], "
+               +fmt(r.from)+", "+fmt(r.to)+", "+py(r.why)+"),");
+    if(!ok.length) out.push("    # (no usable rows)");
+    if(bad.length){
+      out.push("");
+      out.push("# These changed angle but are NOT usable (duplicated label text would make a");
+      out.push("# text-matched angle table abort). Listed verbatim rather than dropped:");
+      for(const r of bad)
+        out.push("#    "+r.text+"("+r.code+")  "+fmt(r.from)+"° -> "+fmt(r.to)+"°");
+    }
+  }
+  return out.join("\n");
+}
+
+/* =========================== Scripting hooks ==========================
+   Drag interactions cannot be verified by a headless screenshot, so the
+   behaviour has to be drivable from a script. Every hook below runs the
+   **same** snap and guard path as a real drag — none of them is a shortcut
+   around it. Messages here are developer-facing and stay in English.
+   ===================================================================== */
+window.applyMove = function(key, dx, dy){
+  const L = M.byKey.get(key);
+  if(!L) throw new Error("No label for key "+key);
+  if(!L.st) throw new Error(key+" has no matching station");
+  pushUndo();
+  L.x += dx; L.y += dy;
+  L.x = L.x0 + Math.round(L.x - L.x0);      /* same snap as mouseup */
+  L.y = L.y0 + Math.round(L.y - L.y0);
+  writeLabel(L); scheduleCount(); updateMovedCount();
+  return {key, x:L.x, y:L.y, dx:+(L.x-L.st.x).toFixed(4), dy:+(L.y-L.st.y).toFixed(4),
+          anchor:L.anchor, rot:L.hasRot?L.rot:null, ldr:!!L.ldr, veto:L.veto};
+};
+window.applyCodeMove = function(key, dx, dy){
+  const C = M.codeByKey.get(key);
+  if(!C) throw new Error("No code for key "+key);
+  pushUndo();
+  C.x += dx; C.y += dy;
+  const s = SLOTS[nearestSlot(C.x-C.sx, C.y-C.sy)];   /* same snap as mouseup */
+  C.x = C.sx+s[0]; C.y = C.sy+s[1]; C.anchor = s[2]; C.grabbed = true;
+  writeCode(C); scheduleCount(); updateMovedCount();
+  return {key, slot:codeSlot(C), was:C.slot0, veto:C.veto};
+};
+/* Shares setAngle with the [ ] \ keys rather than reimplementing it — a
+   parallel path is exactly how you end up forgetting to re-run the overlap
+   count after a keyboard angle change. */
+window.applyAngle = function(key, ang){
+  const L = M.byKey.get(key);
+  if(!L) throw new Error("No label for key "+key);
+  setAngle(L, ang);
+  return {key, rot:L.rot};
+};
+/* Synthesises a real drag (mousedown -> mousemove -> mouseup) so the actual
+   handlers and the screen->map conversion are what gets exercised, not a
+   shortcut past them. px/py are **screen pixels**. */
+window.dragPx = function(key, px, py, kind){
+  const o = (kind==="code") ? M.codeByKey.get(key) : M.byKey.get(key);
+  if(!o) throw new Error("Not found: "+key);
+  const r = o.el.getBoundingClientRect();
+  const cx = r.left + r.width/2, cy = r.top + r.height/2;
+  const ev = (type,x,y)=>new MouseEvent(type,{bubbles:true,cancelable:true,clientX:x,clientY:y,button:0});
+  o.el.dispatchEvent(ev("mousedown", cx, cy));
+  window.dispatchEvent(ev("mousemove", cx+px, cy+py));
+  window.dispatchEvent(ev("mouseup",   cx+px, cy+py));
+  if(kind==="code") return {key, slot:codeSlot(o), was:o.slot0};
+  return {key, dx:+(o.x-o.st.x).toFixed(4), dy:+(o.y-o.st.y).toFixed(4),
+          movedX:+(o.x-o.x0).toFixed(4), movedY:+(o.y-o.y0).toFixed(4), veto:o.veto};
+};
+window.mapScale = userScale;
+window.focusOn = function(key, z){
+  const L = M.byKey.get(key); if(!L) throw new Error("Not found: "+key);
+  zoom = z; applyView();
+  const p = root.createSVGPoint(); p.x = L.x; p.y = L.y;
+  const q = p.matrixTransform(mapCTM);
+  const r = stage.getBoundingClientRect();
+  panX += (r.left + r.width/2) - q.x;
+  panY += (r.top + r.height/2) - q.y;
+  applyView(); recount();
+  return {focus:key, zoom:z, scale:userScale()};
+};
+window.exportMoves = exportRows;
+window.exportText  = exportText;
+window.undo = ()=>{ const s=M.undo.pop(); if(s) restore(s); };
+window.resetAll = ()=>{ pushUndo();
+  for(const L of M.labels){ L.x=L.x0; L.y=L.y0; L.anchor=L.anchor0; L.rot=L.rot0; writeLabel(L); }
+  for(const C of M.codes){ C.x=C.x0; C.y=C.y0; C.anchor=C.anchor0; C.grabbed=false; writeCode(C); }
+  scheduleCount(); updateMovedCount(); };
+window.recount = recount;
+window.__model = M;
+
+/* =========================== UI buttons =============================== */
+$("#btnExport").onclick = ()=>{ $("#exportText").value = exportText(); $("#exportPane").style.display="flex"; };
+$("#btnCloseExp").onclick = ()=>{ $("#exportPane").style.display="none"; };
+$("#btnCopy").onclick = ()=>{ $("#exportText").select(); document.execCommand("copy"); };
+$("#btnReset").onclick = ()=>{ window.resetAll(); };
+$("#btnFit").onclick = ()=> fitAll();
+/* Both angle buttons call the same stepAngle as [ and ] — not a second path */
+$("#btnAngleFlat").onclick = ()=>{
+  if(sel && sel._kind==="name") stepAngle(sel, -1, null);
+  else setInfo(t("angle.pickFirst"), true); };
+$("#btnAngleSteep").onclick = ()=>{
+  if(sel && sel._kind==="name") stepAngle(sel, +1, null);
+  else setInfo(t("angle.pickFirst"), true); };
+
+/* =========================== Boot =====================================
+   Wait for real dimensions: while the container is 0x0, getScreenCTM() and
+   every viewBox conversion return NaN and the whole model comes out wrong.
+   ===================================================================== */
+function waitSize(el){
+  return new Promise(res=>{
+    let n = 0;
+    const tick = ()=>{
+      const r = el.getBoundingClientRect();
+      const m = el.getScreenCTM();
+      if(r.width>1 && r.height>1 && m && isFinite(m.a) && m.a!==0) return res(true);
+      if(++n > 600) return res(false);
+      nextFrame().then(tick);
+    };
+    nextFrame().then(tick);
+  });
+}
+
+async function boot(){
+  try{
+    const bootStep = key=>{ const el=$("#boot small"); if(el) el.textContent=t(key); };
+    bootStep("boot.step.inline");
+    const txt = await (await fetch(SVG_PATH)).text();
+    if(txt.indexOf("<svg")<0) throw new Error(t("boot.err.load", {path:SVG_PATH}));
+    host.innerHTML = txt;
+    root = host.querySelector("svg");
+    if(!root) throw new Error(t("boot.err.notSvg", {path:SVG_PATH}));
+    root.setAttribute("id","tlt-root");   /* stable id for CSS and test hooks */
+    const vb = (root.getAttribute("viewBox")||"0 0 1684 1188").trim().split(/[\s,]+/).map(Number);
+    VB = {w:vb[2], h:vb[3]}; baseW = vb[2];
+    root.removeAttribute("width"); root.removeAttribute("height");
+    root.style.width = baseW+"px"; root.style.height = "auto";
+
+    /* Station coordinates live in the <svg> that wraps the station groups —
+       usually an inner <svg> with its own viewBox. Fall back to the root. */
+    const anyStn = root.querySelector(SEL.station);
+    mapEl = (anyStn && anyStn.parentNode.closest("svg")) || root;
+
+    bootStep("boot.step.outerSize");
+    if(!await waitSize(root)) throw new Error(t("boot.err.outerSize"));
+    bootStep("boot.step.innerCoords");
+    if(!await waitSize(mapEl)) throw new Error(t("boot.err.innerSize"));
+    syncCTM();
+    if(!mapCTM || !isFinite(mapCTM.a) || mapCTM.a===0) throw new Error(t("boot.err.ctm"));
+    bootStep("boot.step.index");
+    buildModel();
+    $("#srcName").textContent = SVG_PATH.split("/").pop();
+    $("#boot").remove();
+    fitAll();
+    updateMovedCount();
+    const loadedText = ()=> t("boot.loaded", {
+      stations:M.stations.length, labels:M.labels.length, codes:M.codes.length,
+      leaders:M.labels.filter(L=>L.ldr).length, panels:M.panels.length});
+    const automated = qs.has("test") || qs.has("uitest");
+    if(automated){
+      await vetoAllAsync();
+      setInfo(loadedText());
+    }else{
+      $("#btnExport").disabled = true;
+      $("#btnExport").title = t("boot.exportWhenDone");
+      setInfo(t("boot.checking"));
+      nextFrame().then(async()=>{
+        await vetoAllAsync();
+        $("#btnExport").disabled = false;
+        $("#btnExport").removeAttribute("title");
+        setInfo(loadedText());
+        scheduleCount();
+      });
+    }
+    window.__ready = true;
+    runTest();
+  }catch(err){
+    $("#boot").innerHTML = '<span class="err">'+err.message+'</span>';
+    document.title = "RESULT"+JSON.stringify({error:err.message});
+    window.__ready = "error";
+  }
+}
+
+/* ?test=<json>  e.g. {"ops":[{"t":"name","key":"Riverside|R05","dx":0,"dy":18},
+                             {"t":"code","key":"Arsenal|B05|B05","dx":-8,"dy":1}]}
+   The result is written into document.title so a headless --dump-dom can
+   read it back without needing a screenshot. */
+function runTest(){
+  const raw = qs.get("test");
+  if(!raw) return;
+  const res = {ops:[], errors:[]};
+  try{
+    const spec = JSON.parse(raw);
+    for(const op of (spec.ops||[])){
+      try{
+        if(op.t==="name")      res.ops.push(window.applyMove(op.key, op.dx||0, op.dy||0));
+        else if(op.t==="code") res.ops.push(window.applyCodeMove(op.key, op.dx||0, op.dy||0));
+        else if(op.t==="angle")res.ops.push(window.applyAngle(op.key, op.ang));
+        else if(op.t==="zoom"){ zoom = op.z; applyView(); res.ops.push({zoom:zoom, scale:userScale()}); }
+        else if(op.t==="dragpx"){
+          /* dx/dy arrive in map units; convert to screen pixels first */
+          const k = userScale();
+          res.ops.push(window.dragPx(op.key, (op.dx||0)*k, (op.dy||0)*k, op.kind));
+        }
+        else if(op.t==="undo"){ window.undo(); res.ops.push({undo:true}); }
+        else if(op.t==="focus"){ res.ops.push(window.focusOn(op.key, op.z||6)); }
+        else if(op.t==="click"){ const b=$(op.sel); if(!b) throw new Error("Selector not found: "+op.sel);
+                                 b.click(); res.ops.push({click:op.sel}); }
+        else if(op.t==="key"){
+          for(let i=0;i<(op.n||1);i++)
+            window.dispatchEvent(new KeyboardEvent("keydown",{key:op.k,bubbles:true,cancelable:true}));
+          res.ops.push({key:op.k, n:op.n||1,
+                        sel: sel ? {x:sel.x, y:sel.y} : null});
+        }
+        else if(op.t==="hover"){ const L=M.byKey.get(op.key); if(!L) throw new Error("Not found: "+op.key);
+                                 hot(L, L.code); if(op.select) select(L, L, "name");
+                                 res.ops.push({hover:op.key, code:L.code?L.code.text:null, ldr:!!L.ldr}); }
+        else res.errors.push("unknown op: "+op.t);
+      }catch(e){ res.errors.push(String(e.message||e)); }
+    }
+    recount();
+    res.export = exportRows();
+    res.text = exportText();
+    res.counts = window.__counts;
+    res.vetoNow = M.labels.filter(L=>L.veto).map(L=>L.text);
+    res.panels = M.panels.map(q=>({fill:q.fill, b:{x0:+q.b.x0.toFixed(1), x1:+q.b.x1.toFixed(1),
+                                                   y0:+q.b.y0.toFixed(1), y1:+q.b.y1.toFixed(1)}}));
+    res.model = {stations:M.stations.length, labels:M.labels.length,
+                 codes:M.codes.length, leaders:M.labels.filter(L=>L.ldr).length,
+                 panels:M.panels.length, mapScale:+userScale().toFixed(6),
+                 mapViewBox:(mapEl.getAttribute("viewBox")||"")};
+  }catch(e){ res.errors.push("could not parse ?test= : "+String(e.message||e)); }
+  const json = JSON.stringify(res);
+  document.title = "RESULT"+json;
+  /* Also expose it as a hidden #testresult node: a title is size-limited and
+     easily clobbered by anything else that sets it. */
+  const pre=document.createElement("pre"); pre.id="testresult";
+  pre.textContent=json; pre.style.display="none"; document.body.appendChild(pre);
+}
+
+boot();
+</script>
+<div class="pane" id="ext2Pane"><b data-i18n="ext2.title"></b>　<span class="k">L</span> <span data-i18n="ext2.hint"></span>　<span style="color:#777" data-i18n="ext2.colorNote"></span><br><table id="ext2Table"></table></div>
+<div class="pane" id="extPane">
+  <b data-i18n="ext.title"></b>　<span id="extHit"></span><br>
+  <span class="k" data-i18n="key.drag"></span> <span data-i18n="ext.hintDrag"></span>　<span class="k">+</span> <span class="k">-</span> <span data-i18n="ext.hintScale"></span>
+  　<span class="k">R</span> <span data-i18n="ext.hintReset"></span><br>
+  <table id="extTable"></table>
+</div>
+<script>
+"use strict";
+/* =======================================================================
+   Extension layer 1: layout blocks and leader endpoints.
+     · blocks (title, legend, cards, footer): drag and scale as a unit
+     · leaders: drag the *label* end on its own
+
+   Written as a layer on purpose — not a single line of the main program is
+   modified, so the geometry above stays the only definition of what counts
+   as an overlap. Events are intercepted in the capture phase and
+   stopPropagation() only fires when a block or leader was really grabbed;
+   everything else falls through to the name/code handlers untouched.
+   ======================================================================= */
+const EXT = {blocks:[], leaders:[], sel:null, drag:null, undo:[]};
+const EXT_BLOCKS = CONFIG.blocks.map(b=>[b.id, b.key]);
+const efmt = v => Math.round(v*10)/10;
+
+function extCorners(el){
+  /* getBBox() excludes the element's own transform. A block that carries a
+     translate+scale must have it multiplied back in, or the box lands in the
+     wrong place and the overlap count runs into the thousands. */
+  const b=el.getBBox();
+  let pts=[[b.x,b.y],[b.x+b.width,b.y],[b.x+b.width,b.y+b.height],[b.x,b.y+b.height]];
+  const c=el.transform && el.transform.baseVal.consolidate();
+  if(c){ const m=c.matrix; pts=pts.map(([x,y])=>[m.a*x+m.c*y+m.e, m.b*x+m.d*y+m.f]); }
+  return pts;
+}
+/* Block captions come from the translation table, so they follow the UI. */
+function blockLabel(b){ return t(b.labelKey); }
+
+function extBoot(){
+  /* --- blocks: wrap each one, then only ever touch the wrapper's transform --- */
+  for(const [id,labelKey] of EXT_BLOCKS){
+    const el = host.querySelector('#'+CSS.escape(id));
+    if(!el) continue;
+    const wrap = document.createElementNS("http://www.w3.org/2000/svg","g");
+    wrap.setAttribute("class","ext-wrap");
+    el.parentNode.insertBefore(wrap, el); wrap.appendChild(el);
+    const q = extCorners(el);          // element transform already applied
+    const xs=q.map(p=>p[0]), ys=q.map(p=>p[1]);
+    EXT.blocks.push({id, labelKey, el, wrap, inner: mapEl.contains(wrap), dx:0, dy:0, s:1,
+                     cx:(Math.min(...xs)+Math.max(...xs))/2, cy:(Math.min(...ys)+Math.max(...ys))/2});
+  }
+  /* --- leaders --- */
+  for(const el of mapEl.querySelectorAll(SEL.leader)){
+    const g = k => parseFloat(el.getAttribute(k));
+    EXT.leaders.push({el, x20:g("x2"), y20:g("y2"), dx:0, dy:0,
+                      x1:g("x1"), y1:g("y1")});
+  }
+  extRender();
+  window.__ext = EXT;
+}
+function extPaint(b){
+  const t = "translate("+efmt(b.dx)+","+efmt(b.dy)+") "
+          + "translate("+efmt(b.cx)+","+efmt(b.cy)+") scale("+efmt(b.s*1000)/1000+") "
+          + "translate("+efmt(-b.cx)+","+efmt(-b.cy)+")";
+  b.wrap.setAttribute("transform", t);
+}
+function extPaintLdr(l){
+  l.el.setAttribute("x2", efmt(l.x20 + l.dx));
+  l.el.setAttribute("y2", efmt(l.y20 + l.dy));
+}
+function extPushUndo(){
+  EXT.undo.push({b:EXT.blocks.map(b=>({b,dx:b.dx,dy:b.dy,s:b.s})),
+                 l:EXT.leaders.map(l=>({l,dx:l.dx,dy:l.dy}))});
+  if(EXT.undo.length>200) EXT.undo.shift();
+}
+function extUndo(){
+  const st=EXT.undo.pop(); if(!st) return;
+  for(const r of st.b){ r.b.dx=r.dx; r.b.dy=r.dy; r.b.s=r.s; extPaint(r.b); }
+  for(const r of st.l){ r.l.dx=r.dx; r.l.dy=r.dy; extPaintLdr(r.l); }
+  extRender(); scheduleCount();
+}
+/* Block collision test: reuse the main program's names, codes, stations and
+   panels, plus a sampled version of the route paths. */
+let EXT_OBS = null;
+function extObstacles(){
+  if(EXT_OBS) return EXT_OBS;
+  const o=[];
+  for(const p of mapEl.querySelectorAll(SEL.route)){
+    const L=p.getTotalLength(); if(!L) continue;
+    let pr=p.getPointAtLength(0);
+    for(let d=6; d<=L; d+=6){ const q=p.getPointAtLength(d);
+      o.push({x0:Math.min(pr.x,q.x)-8,y0:Math.min(pr.y,q.y)-8,x1:Math.max(pr.x,q.x)+8,y1:Math.max(pr.y,q.y)+8}); pr=q; }
+  }
+  for(const s of M.stations) o.push({x0:s.x-12,y0:s.y-12,x1:s.x+12,y1:s.y+12});
+  for(const L2 of M.labels){ const b=bounds(userCorners(L2.el)); o.push({x0:b.x0-4,y0:b.y0-4,x1:b.x1+4,y1:b.y1+4}); }
+  for(const c of M.codes){ const b=bounds(userCorners(c.el)); o.push({x0:b.x0-4,y0:b.y0-4,x1:b.x1+4,y1:b.y1+4}); }
+  EXT_OBS=o; return o;
+}
+function extInnerBox(b){
+  let pts=extCorners(b.el);
+  /* then the wrapper: scale about the block centre, then translate */
+  pts=pts.map(([x,y])=>[b.cx+(x-b.cx)*b.s+b.dx, b.cy+(y-b.cy)*b.s+b.dy]);
+  let xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]);
+  let x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys);
+  if(b.inner) return {x0,y0,x1,y1};
+  const vb=(mapEl.getAttribute("viewBox")||"0 0 1684 1188").split(/\s+/).map(Number);
+  const w=+mapEl.getAttribute("width")||1684, h=+mapEl.getAttribute("height")||1188;
+  const mx=+mapEl.getAttribute("x")||0, my=+mapEl.getAttribute("y")||0;
+  const k=Math.min(w/vb[2],h/vb[3]);
+  const ox=mx+(w-vb[2]*k)/2, oy=my+(h-vb[3]*k)/2;
+  return {x0:vb[0]+(x0-ox)/k, x1:vb[0]+(x1-ox)/k, y0:vb[1]+(y0-oy)/k, y1:vb[1]+(y1-oy)/k};
+}
+function extHits(b){
+  const B=extInnerBox(b); let n=0;
+  for(const o of extObstacles()) if(!(o.x1<B.x0||o.x0>B.x1||o.y1<B.y0||o.y0>B.y1)) n++;
+  return n;
+}
+function extRender(){
+  let tot=0;
+  const rows=EXT.blocks.map(b=>{
+    b.hits=extHits(b); tot+=b.hits;
+    b.wrap.style.outline = b.hits? "3px dashed #b3261e" : "";
+    return '<tr class="'+(EXT.sel===b?"sel":"")+'"><td>'+blockLabel(b)+'</td>'
+      +'<td class="n">'+efmt(b.dx)+'</td><td class="n">'+efmt(b.dy)+'</td>'
+      +'<td class="n">'+Math.round(b.s*100)+'%</td>'
+      +'<td class="'+(b.hits?"err":"")+'">'+(b.hits?t("ext.hit"):t("ext.ok"))+'</td></tr>';
+  }).join("");
+  const nl=EXT.leaders.filter(l=>l.dx||l.dy).length;
+  $("#extTable").innerHTML =
+    '<tr><td><b>'+t("ext.blocks")+'</b></td><td class="n">dx</td><td class="n">dy</td>'
+    +'<td class="n">'+t("ext.size")+'</td><td></td></tr>'+rows
+    +'<tr><td colspan="5" style="padding-top:4px;color:#555">'
+    +t("ext.leadersAdjusted",{n:nl})+'</td></tr>';
+  $("#extHit").innerHTML = tot? '<span class="err">'+t("ext.totalHits",{n:tot})+'</span>'
+                              : t("ext.totalHits",{n:0});
+}
+RELABEL.push(()=>{ if(EXT.blocks.length) extRender(); });
+/* ---------------- events (capture phase first) ---------------- */
+function extBlockAt(e){
+  if(window.__layerLocks && window.__layerLocks.blocks) return null;
+  for(const b of EXT.blocks) if(b.wrap.contains(e.target)) return b;
+  return null;
+}
+function extLeaderAt(e){
+  if(window.__layerLocks && window.__layerLocks.leaders) return null;
+  /* screen -> map coords, then the leader whose label end is nearest
+     within 24 units */
+  const p=root.createSVGPoint(); p.x=e.clientX; p.y=e.clientY;
+  const q=p.matrixTransform(mapInv);
+  let best=null;
+  for(const l of EXT.leaders){
+    const x2=l.x20+l.dx, y2=l.y20+l.dy;
+    const d=Math.hypot(q.x-x2, q.y-y2);
+    if(d<24 && (!best||d<best.d)) best={l,d};
+  }
+  return best? best.l : null;
+}
+stage.addEventListener("mousedown", e=>{
+  if(e.button!==0 || spaceDown) return;
+  const b=extBlockAt(e);
+  if(b){ if(sel){sel.el.classList.remove("dt-sel");sel=null;} EXT2.sel=null;EXT.sel=b; extPushUndo();
+         const k=(b.inner? zoom*extMapScale() : zoom);
+         EXT.drag={kind:"block", b, mx:e.clientX, my:e.clientY, dx0:b.dx, dy0:b.dy, k};
+         e.stopPropagation(); e.preventDefault(); extRender(); return; }
+  const l=extLeaderAt(e);
+  if(l){ if(sel){sel.el.classList.remove("dt-sel");sel=null;} EXT2.sel=null;EXT.sel=l; extPushUndo();
+         EXT.drag={kind:"ldr", l, mx:e.clientX, my:e.clientY, dx0:l.dx, dy0:l.dy, k:zoom*extMapScale()};
+         e.stopPropagation(); e.preventDefault();
+         setInfo(t("ldr.info",{x:efmt(l.x20+l.dx), y:efmt(l.y20+l.dy)})); return; }
+}, true);
+function extMapScale(){
+  const vb=(mapEl.getAttribute("viewBox")||"0 0 1684 1188").split(/\s+/).map(Number);
+  const w=+mapEl.getAttribute("width")||1684, h=+mapEl.getAttribute("height")||1188;
+  return Math.min(w/vb[2],h/vb[3]);
+}
+window.addEventListener("mousemove", e=>{
+  const d=EXT.drag; if(!d) return;
+  if(d.kind==="block"){
+    d.b.dx=d.dx0+(e.clientX-d.mx)/d.k; d.b.dy=d.dy0+(e.clientY-d.my)/d.k;
+    extPaint(d.b); extRender();
+  }else{
+    d.l.dx=d.dx0+(e.clientX-d.mx)/d.k; d.l.dy=d.dy0+(e.clientY-d.my)/d.k;
+    extPaintLdr(d.l); extRender();
+  }
+}, true);
+window.addEventListener("mouseup", ()=>{ if(EXT.drag){ EXT.drag=null; scheduleCount(); extRender(); } }, true);
+window.addEventListener("keydown", e=>{
+  if(e.target && e.target.closest && e.target.closest("input,textarea")) return;
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="z" && EXT.undo.length){ e.preventDefault(); extUndo(); e.stopPropagation(); return; }
+  const b=EXT.sel; if(!b) return;
+  if(b.wrap){                                   /* blocks: scale + arrows */
+    if(e.key==="+"||e.key==="="){ e.preventDefault(); extPushUndo(); b.s*=1.02; extPaint(b); extRender(); e.stopPropagation(); }
+    else if(e.key==="-"||e.key==="_"){ e.preventDefault(); extPushUndo(); b.s/=1.02; extPaint(b); extRender(); e.stopPropagation(); }
+    else if(e.key.toLowerCase()==="r"){ e.preventDefault(); extPushUndo(); b.s=1; extPaint(b); extRender(); e.stopPropagation(); }
+    else {
+      const dd={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
+      if(dd){ e.preventDefault(); extPushUndo(); const st=e.shiftKey?10:1;
+              b.dx+=dd[0]*st; b.dy+=dd[1]*st; extPaint(b); extRender(); e.stopPropagation(); }
+    }
+  }else if(b.el){                               /* leaders: arrows only */
+    const dd={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
+    if(dd){ e.preventDefault(); extPushUndo(); const st=e.shiftKey?10:1;
+            b.dx+=dd[0]*st; b.dy+=dd[1]*st; extPaintLdr(b); extRender(); e.stopPropagation(); }
+  }
+}, true);
+
+/* ---------------- export: appended to the main move list ---------------- */
+const _origExportText = exportText;
+function extExportText(){
+  const L=[_origExportText()];
+  const bad=EXT.blocks.filter(b=>b.hits>0);
+  L.push("");
+  L.push("# ---- LAYOUT_NUDGE (block offsets; blocks inside the inner map are in map units,");
+  L.push("#      blocks on the outer canvas are in canvas units) ----");
+  if(bad.length) L.push("# !! still overlapping: "
+    +bad.map(b=>blockLabel(b)+"("+b.hits+")").join(", "));
+  L.push("LAYOUT_NUDGE = {");
+  for(const b of EXT.blocks) L.push('    "'+b.id+'": ('+efmt(b.dx)+', '+efmt(b.dy)+'),   # '+blockLabel(b)
+    +(b.hits?'  <- overlaps '+b.hits:''));
+  L.push("}");
+  L.push("# ---- LAYOUT_SCALE (block scale factor, anchored at the block centre) ----");
+  L.push("LAYOUT_SCALE = {");
+  for(const b of EXT.blocks) if(Math.abs(b.s-1)>1e-6) L.push('    "'+b.id+'": '+efmt(b.s*1000)/1000+',   # '+blockLabel(b));
+  L.push("}");
+  const ld=EXT.leaders.filter(l=>l.dx||l.dy);
+  L.push("# ---- LEADER_NUDGE (offset of the leader's *label* end, map units) ----");
+  L.push("#      Identified by the station end (x1,y1): that end never moves and is unique.");
+  L.push("LEADER_NUDGE = [");
+  for(const l of ld) L.push('    (('+efmt(l.x1)+', '+efmt(l.y1)+'), '+efmt(l.dx)+', '+efmt(l.dy)+'),');
+  if(!ld.length) L.push("    # (none)");
+  L.push("]");
+  return L.join("\n");
+}
+$("#btnExport").onclick = ()=>{ $("#exportText").value = extExportText(); $("#exportPane").style.display="block"; };
+/* Filename carries a timestamp so an applier can always pick the newest
+   export without any copy-paste step. */
+function moveListName(){
+  const d=new Date(), z=n=>String(n).padStart(2,"0");
+  return "move-list_"+d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())
+        +"_"+z(d.getHours())+z(d.getMinutes())+".txt";
+}
+$("#btnDown").onclick = ()=>{
+  const name=moveListName();
+  const blob=new Blob([$("#exportText").value||extExportText()],{type:"text/plain;charset=utf-8"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setInfo(t("dl.done",{name}));
+};
+
+/* Scripting hooks (headless verification; same path as the mouse) */
+window.moveBlock = (id,dx,dy)=>{ const b=EXT.blocks.find(x=>x.id===id); if(!b) throw new Error("No block with id "+id);
+  extPushUndo(); b.dx+=dx; b.dy+=dy; extPaint(b); extRender(); return {id,dx:b.dx,dy:b.dy,hits:b.hits}; };
+window.scaleBlock = (id,f)=>{ const b=EXT.blocks.find(x=>x.id===id); if(!b) throw new Error("No block with id "+id);
+  extPushUndo(); b.s*=f; extPaint(b); extRender(); return {id,s:b.s,hits:b.hits}; };
+window.moveLeader = (i,dx,dy)=>{ const l=EXT.leaders[i]; if(!l) throw new Error("No leader at index "+i);
+  extPushUndo(); l.dx+=dx; l.dy+=dy; extPaintLdr(l); extRender();
+  return {i, x2:efmt(l.x20+l.dx), y2:efmt(l.y20+l.dy)}; };
+window.extState = ()=>({blocks:EXT.blocks.map(b=>({id:b.id,inner:b.inner,dx:efmt(b.dx),dy:efmt(b.dy),
+  s:efmt(b.s*1000)/1000,hits:b.hits,box:extInnerBox(b)})),
+  leaders:EXT.leaders.length, moved:EXT.leaders.filter(l=>l.dx||l.dy).length, text:extExportText()});
+
+/* initialise once the main program is ready */
+(function wait(){ if(window.__ready){ extBoot(); extRunTest(); } else setTimeout(wait,120); })();
+
+/* ?exttest= has its own channel: document.title is already taken by the main
+   program's ?test=, so results land in a hidden #extresult node instead. */
+function extRunTest(){
+  const raw = new URLSearchParams(location.search).get("exttest");
+  if(!raw) return;
+  const res={ops:[],errors:[]};
+  try{
+    for(const op of (JSON.parse(raw).ops||[])){
+      try{
+        if(op.k==="block")      res.ops.push(window.moveBlock(op.id, op.dx||0, op.dy||0));
+        else if(op.k==="scale") res.ops.push(window.scaleBlock(op.id, op.f));
+        else if(op.k==="ldr")   res.ops.push(window.moveLeader(op.i, op.dx||0, op.dy||0));
+        else res.errors.push("unknown op: "+op.k);
+      }catch(e){ res.errors.push(String(e.message||e)); }
+    }
+    res.state = window.extState();
+  }catch(e){ res.errors.push("could not parse ?exttest= : "+String(e.message||e)); }
+  const pre=document.createElement("pre"); pre.id="extresult";
+  pre.textContent=JSON.stringify(res); pre.style.display="none";
+  document.body.appendChild(pre);
+}
+</script>
+
+<script>
+"use strict";
+/* =======================================================================
+   Extension layer 2: everything about lines that do not exist yet.
+     A. Proposal boxes — drag a "not to scale" box into place and export its
+        anchor for your own data file.
+     B. Eight-direction tracing — click vertices to draw a new line; every
+        segment snaps to the nearest of eight directions and corners use the
+        same rounding convention as the rest of the diagram (the Q control
+        point *is* the corner, pulled back by CONFIG.schematic.setback).
+
+   Design notes
+     · Eight-direction geometry is guaranteed by construction, not repaired
+       afterwards by a linter.
+     · Colour, line name and status deliberately do NOT come from here. The
+       trace is drawn in a neutral grey placeholder and the export says so —
+       those belong to whatever data source owns your network.
+   ======================================================================= */
+const EXT2 = {schem:[], trace:null, lines:[], mode:null};
+
+/* ---------------- A. proposal boxes ---------------- */
+function ext2FindSchem(){
+  /* Proposal boxes have no dedicated id, so they are located by their marker
+     text; the members that fall inside the box are then grouped so the whole
+     thing drags as one. */
+  const KEYS = CONFIG.schematic.keys;
+  /* For each marker, take the **smallest rect containing it** — that is its
+     box. Reasoning from "a big enough rect" instead is a trap: the drawing's
+     full-canvas background rect also contains every marker, and swallows the
+     entire map in one go. */
+  const boxes=[]; const seen=new Set();
+  for(const tx_el of mapEl.querySelectorAll("text")){
+    if(!CONFIG.schematic.marker.test(tx_el.textContent)) continue;
+    const tx=+tx_el.getAttribute("x"), ty=+tx_el.getAttribute("y");
+    let best=null;
+    for(const r of mapEl.querySelectorAll("rect")){
+      const x=+r.getAttribute("x"), y=+r.getAttribute("y");
+      const w=+r.getAttribute("width"), h=+r.getAttribute("height");
+      if(!Number.isFinite(x)||!Number.isFinite(w)) continue;
+      if(!(tx>=x-2 && tx<=x+w+2 && ty>=y-2 && ty<=y+h+2)) continue;
+      if(!best || w*h < best.w*best.h) best={rect:r, x, y, w, h};
+    }
+    if(!best) continue;
+    const sig=Math.round(best.x)+","+Math.round(best.y);
+    if(seen.has(sig)) continue;
+    seen.add(sig);
+    best.key = KEYS[sig] || null;
+    boxes.push(best);
+  }
+  for(const b of boxes){
+    const wrap=document.createElementNS("http://www.w3.org/2000/svg","g");
+    wrap.setAttribute("class","ext-schem");
+    if(b.key) wrap.setAttribute("data-key", b.key);
+    b.rect.parentNode.insertBefore(wrap, b.rect);
+    const inside=(x,y)=> x>=b.x-2 && x<=b.x+b.w+2 && y>=b.y-2 && y<=b.y+b.h+2;
+    const take=[];
+    for(const el of [...mapEl.querySelectorAll("rect,text,line,circle,path")]){
+      if(el.closest("g.stn-g") || el.classList.contains("lbl") || el.closest("g.boss-code-label")) continue;
+      if(el.closest("g.ext-schem") && el.closest("g.ext-schem")!==wrap) continue;
+      const g=n=>parseFloat(el.getAttribute(n));
+      let x,y;
+      if(el.tagName==="line"){ x=g("x1"); y=g("y1"); }
+      else if(el.tagName==="circle"){ x=g("cx"); y=g("cy"); }
+      else if(el.tagName==="path"){ const bb=el.getBBox(); x=bb.x; y=bb.y; }
+      else { x=g("x"); y=g("y"); }
+      if(Number.isFinite(x) && inside(x,y)) take.push(el);
+    }
+    for(const el of take) wrap.appendChild(el);
+    EXT2.schem.push({wrap, key:b.key, x0:b.x, y0:b.y, w:b.w, h:b.h, dx:0, dy:0,
+                     label:(b.key||(t("type.schem")+" "+Math.round(b.x)+","+Math.round(b.y))), n:take.length});
+  }
+}
+function ext2PaintSchem(sc){ sc.wrap.setAttribute("transform","translate("+efmt(sc.dx)+","+efmt(sc.dy)+")"); }
+function ext2SchemHits(sc){
+  const B={x0:sc.x0+sc.dx, y0:sc.y0+sc.dy, x1:sc.x0+sc.w+sc.dx, y1:sc.y0+sc.h+sc.dy};
+  let n=0; for(const o of extObstacles()) if(!(o.x1<B.x0||o.x0>B.x1||o.y1<B.y0||o.y0>B.y1)) n++;
+  return n;
+}
+
+/* ---------------- B. eight-direction tracing ---------------- */
+const EXT2_SETBACK = CONFIG.schematic.setback;   // same rounding as the artwork
+function ext2Snap8(from, to){
+  const dx=to.x-from.x, dy=to.y-from.y, L=Math.hypot(dx,dy);
+  if(L<1e-6) return {x:from.x, y:from.y};
+  let best=null;
+  for(let i=0;i<8;i++){
+    const a=i*Math.PI/4, ux=Math.cos(a), uy=Math.sin(a);
+    const proj=dx*ux+dy*uy;                    // projection onto that direction
+    if(proj<=0) continue;
+    const d=Math.abs(dx*uy-dy*ux);             // perpendicular distance = drift
+    if(!best || d<best.d) best={d, x:from.x+ux*proj, y:from.y+uy*proj};
+  }
+  return best ? {x:Math.round(best.x*10)/10, y:Math.round(best.y*10)/10} : {x:from.x,y:from.y};
+}
+function ext2PathD(pts){
+  /* Same corner convention as the artwork: L stops `setback` short of the
+     corner, then Q uses the corner itself as its control point. */
+  if(pts.length<2) return "";
+  const P=pts, out=["M"+P[0].x+","+P[0].y];
+  for(let i=1;i<P.length-1;i++){
+    const a=P[i-1], c=P[i], b=P[i+1];
+    const la=Math.hypot(c.x-a.x,c.y-a.y), lb=Math.hypot(b.x-c.x,b.y-c.y);
+    const s=Math.min(EXT2_SETBACK, la/2, lb/2);
+    const p1={x:c.x+(a.x-c.x)/la*s, y:c.y+(a.y-c.y)/la*s};
+    const p2={x:c.x+(b.x-c.x)/lb*s, y:c.y+(b.y-c.y)/lb*s};
+    out.push("L"+efmt(p1.x)+","+efmt(p1.y));
+    out.push("Q"+efmt(c.x)+","+efmt(c.y)+" "+efmt(p2.x)+","+efmt(p2.y));
+  }
+  out.push("L"+P[P.length-1].x+","+P[P.length-1].y);
+  return out.join(" ");
+}
+function ext2TraceStart(){
+  if(window.__layerLocks && window.__layerLocks.newlines){
+    setInfo(t("trace.locked"), true);
+    return;
+  }
+  EXT2.mode="trace";
+  const g=document.createElementNS("http://www.w3.org/2000/svg","g");
+  g.setAttribute("class","ext-trace");
+  const cas=document.createElementNS("http://www.w3.org/2000/svg","path");
+  cas.setAttribute("fill","none"); cas.setAttribute("stroke","#FBFAF7");
+  cas.setAttribute("stroke-width","13"); cas.setAttribute("stroke-linejoin","round");
+  const col=document.createElementNS("http://www.w3.org/2000/svg","path");
+  col.setAttribute("fill","none"); col.setAttribute("stroke","#7a7a7a");   /* neutral placeholder: real colour is not this tool's business */
+  col.setAttribute("stroke-width","7.7"); col.setAttribute("stroke-linejoin","round");
+  col.setAttribute("stroke-dasharray","18 12");                            /* new lines default to a "planned" dash */
+  g.appendChild(cas); g.appendChild(col); mapEl.appendChild(g);
+  EXT2.trace={g, cas, col, pts:[]};
+  setInfo(t("trace.start"));
+  ext2Render();
+}
+function ext2TraceRepaint(){
+  const tr=EXT2.trace; if(!tr) return;
+  const d=ext2PathD(tr.pts);
+  tr.cas.setAttribute("d", d); tr.col.setAttribute("d", d);
+}
+function ext2TraceFinish(keep){
+  const tr=EXT2.trace; if(!tr) return;
+  if(keep && tr.pts.length>=2){
+    EXT2.lines.push({pts:tr.pts.slice(), d:ext2PathD(tr.pts), g:tr.g});
+    setInfo(t("trace.done",{n:tr.pts.length}));
+  }else{
+    tr.g.remove();
+    setInfo(t(keep ? "trace.tooFew" : "trace.cancelled"));
+  }
+  EXT2.trace=null; EXT2.mode=null; ext2Render();
+}
+
+/* ---------------- events ---------------- */
+stage.addEventListener("mousedown", e=>{
+  if(e.button!==0 || spaceDown) return;
+  if(EXT2.mode==="trace"){
+    const p=root.createSVGPoint(); p.x=e.clientX; p.y=e.clientY;
+    const q=p.matrixTransform(mapInv);
+    const tr=EXT2.trace;
+    const pt = tr.pts.length ? ext2Snap8(tr.pts[tr.pts.length-1], q)
+                            : {x:Math.round(q.x*10)/10, y:Math.round(q.y*10)/10};
+    tr.pts.push(pt); ext2TraceRepaint(); ext2Render();
+    e.stopPropagation(); e.preventDefault(); return;
+  }
+  for(const sc of EXT2.schem){
+    if(sc.wrap.contains(e.target)){
+      if(sel){sel.el.classList.remove("dt-sel");sel=null;} EXT.sel=null;EXT2.sel=sc; extPushUndo();
+      EXT2.drag={sc, mx:e.clientX, my:e.clientY, dx0:sc.dx, dy0:sc.dy, k:zoom*extMapScale()};
+      e.stopPropagation(); e.preventDefault(); ext2Render(); return;
+    }
+  }
+}, true);
+window.addEventListener("mousemove", e=>{
+  const d=EXT2.drag; if(!d) return;
+  d.sc.dx=d.dx0+(e.clientX-d.mx)/d.k; d.sc.dy=d.dy0+(e.clientY-d.my)/d.k;
+  ext2PaintSchem(d.sc); ext2Render();
+}, true);
+window.addEventListener("mouseup", ()=>{ if(EXT2.drag){ EXT2.drag=null; ext2Render(); } }, true);
+window.addEventListener("keydown", e=>{
+  if(e.target && e.target.closest && e.target.closest("input,textarea")) return;
+  if(EXT2.mode==="trace"){
+    if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); ext2TraceFinish(true); return; }
+    if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); ext2TraceFinish(false); return; }
+    if(e.key==="Backspace"){ e.preventDefault(); e.stopPropagation();
+      EXT2.trace.pts.pop(); ext2TraceRepaint(); ext2Render(); return; }
+    return;
+  }
+  if(e.key.toLowerCase()==="l" && !e.metaKey && !e.ctrlKey){
+    e.preventDefault(); e.stopPropagation();
+    if(window.__historyPush) window.__historyPush(t("hist.trace"));
+    ext2TraceStart(); return;
+  }
+  const sc=EXT2.sel;
+  if(sc && EXT2.schem.includes(sc)){
+    const dd={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
+    if(dd){ e.preventDefault(); e.stopPropagation(); extPushUndo();
+            const st=e.shiftKey?10:1; sc.dx+=dd[0]*st; sc.dy+=dd[1]*st; ext2PaintSchem(sc); ext2Render(); }
+  }
+}, true);
+
+/* ---------------- panel and export ---------------- */
+function ext2Render(){
+  const rows=EXT2.schem.map(sc=>{
+    sc.hits=ext2SchemHits(sc);
+    sc.wrap.style.outline = sc.hits? "3px dashed #b3261e" : "";
+    const ax=efmt(sc.x0+sc.dx), ay=efmt(sc.y0+sc.dy);
+    return '<tr class="'+(EXT2.sel===sc?"sel":"")+'"><td>'+sc.label+'</td>'
+      +'<td class="n">'+ax+'</td><td class="n">'+ay+'</td>'
+      +'<td class="'+(sc.hits?"err":"")+'">'+(sc.hits?t("ext.hit"):t("ext.ok"))+'</td></tr>';
+  }).join("");
+  const tr=EXT2.trace;
+  $("#ext2Table").innerHTML =
+    '<tr><td><b>'+t("ext2.schem")+'</b></td><td class="n">'+t("ext2.anchorX")+'</td><td class="n">y</td><td></td></tr>'+rows
+    + '<tr><td colspan="4" style="padding-top:4px;color:#555">'+t("ext2.linesDrawn",{n:EXT2.lines.length})
+    + (tr? '　<b>'+t("ext2.tracing",{n:tr.pts.length})+'</b>':'')+'</td></tr>';
+}
+const _extExport = extExportText;
+function ext2ExportText(){
+  const L=[_extExport()];
+  L.push("");
+  L.push("# ---- SCHEMATIC_ANCHOR (top-left corner of each proposal box, map units) ----");
+  L.push("#      Keys come from CONFIG.schematic.keys and are what your own data file uses.");
+  L.push("SCHEMATIC_ANCHOR = {");
+  /* A box with no configured key has nowhere to be written back to. If it was
+     moved anyway, say so explicitly rather than dropping the edit silently. */
+  for(const sc of EXT2.schem){
+    if(!sc.key && (sc.dx || sc.dy))
+      L.push("#    !! "+sc.label+" was moved by ("+efmt(sc.dx)+","+efmt(sc.dy)+") but has no"
+             +" key in CONFIG.schematic.keys — no applier can place it. Add a key or revert it.");
+  }
+  for(const sc of EXT2.schem){
+    if(!sc.key) continue;
+    if(!sc.dx && !sc.dy) continue;
+    L.push('    "'+sc.key+'": ('+efmt(sc.x0+sc.dx)+', '+efmt(sc.y0+sc.dy)+'),'
+           +(sc.hits?'   # <- overlaps '+sc.hits:''));
+  }
+  L.push("}");
+  L.push("# ---- NEW_LINE (traced vertices, eight-direction. Geometry only — colour,");
+  L.push("#      line name and status belong to your own data source, not to this file) ----");
+  L.push("NEW_LINE = [");
+  for(const ln of EXT2.lines){
+    L.push("    {");
+    L.push('        "points": ['+ln.pts.map(p=>"("+efmt(p.x)+", "+efmt(p.y)+")").join(", ")+"],");
+    L.push('        "d": "'+ln.d+'",');
+    L.push('        "note": "vertices snapped to eight directions; corner setback '+EXT2_SETBACK+', same convention as the artwork",');
+    L.push("    },");
+  }
+  if(!EXT2.lines.length) L.push("    # (none)");
+  L.push("]");
+  return L.join("\n");
+}
+$("#btnExport").onclick = ()=>{ $("#exportText").value = ext2ExportText(); $("#exportPane").style.display="block"; };
+$("#btnDown").onclick = ()=>{
+  const name=moveListName();
+  const blob=new Blob([$("#exportText").value||ext2ExportText()],{type:"text/plain;charset=utf-8"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setInfo(t("dl.done",{name}));
+};
+
+/* Scripting hooks (headless verification) */
+window.moveSchem = (key,dx,dy)=>{ const sc=EXT2.schem.find(x=>x.key===key); if(!sc) throw new Error("No proposal box with key "+key);
+  extPushUndo(); sc.dx+=dx; sc.dy+=dy; ext2PaintSchem(sc); ext2Render();
+  return {key, anchor:[efmt(sc.x0+sc.dx), efmt(sc.y0+sc.dy)], hits:sc.hits}; };
+window.traceLine = (pts)=>{ if(window.__historyPush) window.__historyPush(t("hist.trace")); ext2TraceStart();
+  for(const [x,y] of pts){
+    const tr=EXT2.trace;
+    const pt = tr.pts.length ? ext2Snap8(tr.pts[tr.pts.length-1], {x,y}) : {x,y};
+    tr.pts.push(pt);
+  }
+  ext2TraceRepaint(); ext2TraceFinish(true);
+  const ln=EXT2.lines[EXT2.lines.length-1];
+  return {pts:ln.pts, d:ln.d}; };
+window.ext2State = ()=>({schem:EXT2.schem.map(sc=>({key:sc.key,label:sc.label,members:sc.n,
+  anchor:[efmt(sc.x0+sc.dx),efmt(sc.y0+sc.dy)],hits:sc.hits})), lines:EXT2.lines, text:ext2ExportText()});
+
+(function w2(){ if(window.__ext){ ext2FindSchem(); ext2Render(); ext2RunTest(); } else setTimeout(w2,150); })();
+function ext2RunTest(){
+  const raw=new URLSearchParams(location.search).get("ext2test"); if(!raw) return;
+  const res={ops:[],errors:[]};
+  try{
+    for(const op of (JSON.parse(raw).ops||[])){
+      try{
+        if(op.k==="schem") res.ops.push(window.moveSchem(op.key, op.dx||0, op.dy||0));
+        else if(op.k==="trace") res.ops.push(window.traceLine(op.pts));
+        else res.errors.push("unknown op: "+op.k);
+      }catch(e){ res.errors.push(String(e.message||e)); }
+    }
+    res.state=window.ext2State();
+  }catch(e){ res.errors.push("could not parse ?ext2test= : "+String(e.message||e)); }
+  const pre=document.createElement("pre"); pre.id="ext2result"; pre.style.display="none";
+  pre.textContent=JSON.stringify(res); document.body.appendChild(pre);
+}
+
+</script>
+<script>
+"use strict";
+/* =======================================================================
+   Working layer: one history for every kind of edit, search, the selection
+   inspector, layer locks, autosave/session files, export preflight and the
+   accessibility wiring.
+
+   It does not reimplement any geometry — every position change still goes
+   through writeLabel / writeCode / extPaint above, so there is exactly one
+   definition of what a move means.
+   ======================================================================= */
+(function(){
+const UIH={undo:[],redo:[],applying:false,dirty:false,baseline:null,initialCounts:null,saveTimer:null};
+const DRAFT_KEY="rail-layout-draft:"+SOURCE_FINGERPRINT+":"+PANEL_FORMAT_VERSION;
+window.__layerLocks={labels:false,codes:false,leaders:false,blocks:false,newlines:false};
+
+function captureState(){
+  return {
+    format:PANEL_FORMAT_VERSION,source:SOURCE_FINGERPRINT,savedAt:new Date().toISOString(),
+    labels:M.labels.map(L=>({x:L.x,y:L.y,anchor:L.anchor,rot:L.rot})),
+    codes:M.codes.map(C=>({x:C.x,y:C.y,anchor:C.anchor,grabbed:!!C.grabbed})),
+    blocks:(window.__ext?EXT.blocks:[]).map(b=>({id:b.id,dx:b.dx,dy:b.dy,s:b.s})),
+    leaders:(window.__ext?EXT.leaders:[]).map(l=>({dx:l.dx,dy:l.dy})),
+    schem:(typeof EXT2!=="undefined"?EXT2.schem:[]).map(sc=>({key:sc.key,label:sc.label,dx:sc.dx,dy:sc.dy})),
+    lines:(typeof EXT2!=="undefined"?EXT2.lines:[]).map(ln=>({pts:ln.pts.map(p=>({x:p.x,y:p.y}))}))
+  };
+}
+function assertCompatible(s){
+  if(!s||s.format!==PANEL_FORMAT_VERSION) throw new Error(t("session.formatMismatch",{v:PANEL_FORMAT_VERSION}));
+  if(s.source!==SOURCE_FINGERPRINT) throw new Error(t("session.sourceMismatch"));
+  if(!Array.isArray(s.labels)||s.labels.length!==M.labels.length) throw new Error(t("session.labelCount"));
+  if(!Array.isArray(s.codes)||s.codes.length!==M.codes.length) throw new Error(t("session.codeCount"));
+}
+function restoreState(s){
+  assertCompatible(s); UIH.applying=true;
+  try{
+    s.labels.forEach((r,i)=>{const L=M.labels[i];L.x=r.x;L.y=r.y;L.anchor=r.anchor;L.rot=r.rot;writeLabel(L);});
+    s.codes.forEach((r,i)=>{const C=M.codes[i];C.x=r.x;C.y=r.y;C.anchor=r.anchor;C.grabbed=!!r.grabbed;writeCode(C);});
+    for(const r of (s.blocks||[])){const b=EXT.blocks.find(x=>x.id===r.id);if(!b)continue;
+      b.dx=r.dx;b.dy=r.dy;b.s=r.s;extPaint(b);}
+    (s.leaders||[]).forEach((r,i)=>{const l=EXT.leaders[i];if(!l)return;l.dx=r.dx;l.dy=r.dy;extPaintLdr(l);});
+    for(const r of (s.schem||[])){const sc=EXT2.schem.find(x=>(r.key&&x.key===r.key)||(!r.key&&x.label===r.label));
+      if(!sc)continue;sc.dx=r.dx;sc.dy=r.dy;ext2PaintSchem(sc);}
+    for(const ln of EXT2.lines){if(ln.g)ln.g.remove();}
+    mapEl.querySelectorAll("g.ext-trace").forEach(g=>g.remove());
+    EXT2.lines.length=0;EXT2.trace=null;EXT2.mode=null;
+    const wasLock=window.__layerLocks.newlines;window.__layerLocks.newlines=false;
+    for(const ln of (s.lines||[])){ext2TraceStart();if(!EXT2.trace)continue;
+      EXT2.trace.pts=ln.pts.map(p=>({x:p.x,y:p.y}));ext2TraceRepaint();ext2TraceFinish(true);}
+    window.__layerLocks.newlines=wasLock;
+    EXT_OBS=null;vetoAll();recount();extRender();ext2Render();updateMovedCount();updateInspector();
+  }finally{UIH.applying=false;}
+}
+function updateHistoryButtons(){
+  $("#btnUndo").disabled=!UIH.undo.length;$("#btnRedo").disabled=!UIH.redo.length;
+  $("#btnUndo").title=UIH.undo.length?t("hist.undoTip",{label:UIH.undo[UIH.undo.length-1].label}):t("hist.noUndo");
+  $("#btnRedo").title=UIH.redo.length?t("hist.redoTip",{label:UIH.redo[UIH.redo.length-1].label}):t("hist.noRedo");
+}
+function historyPush(label){
+  if(UIH.applying)return;
+  UIH.undo.push({label:label||t("hist.generic"),state:captureState()});
+  if(UIH.undo.length>200)UIH.undo.shift();
+  UIH.redo.length=0;UIH.dirty=true;updateHistoryButtons();scheduleDraftSave();
+}
+function historyUndo(){
+  const x=UIH.undo.pop();if(!x)return;
+  UIH.redo.push({label:x.label,state:captureState()});restoreState(x.state);
+  updateHistoryButtons();scheduleDraftSave();setInfo(t("hist.undone",{label:x.label}));
+}
+function historyRedo(){
+  const x=UIH.redo.pop();if(!x)return;
+  UIH.undo.push({label:x.label,state:captureState()});restoreState(x.state);
+  updateHistoryButtons();scheduleDraftSave();setInfo(t("hist.redone",{label:x.label}));
+}
+window.__historyPush=historyPush;
+
+/* Funnel the two separate undo stacks into one timeline. */
+pushUndo=()=>historyPush(t(sel&&sel._kind==="code"?"hist.code":"hist.name"));
+extPushUndo=()=>historyPush(t(EXT.sel&&EXT.sel.wrap?"hist.block":"hist.leader"));
+window.undo=historyUndo;window.redo=historyRedo;
+
+function updateInspector(){
+  const row=(k,v)=>t(k)+": "+v;
+  let body=t("inspector.empty");
+  if(sel){
+    if(sel._kind==="name")body=[
+      row("insp.type",t("type.label")), row("insp.name",sel.text),
+      row("insp.code",sel.st?sel.st.code:"—"),
+      row("insp.offset","dx "+fmt(sel.x-sel.x0)+" / dy "+fmt(sel.y-sel.y0)),
+      row("insp.anchor",sel.anchor),
+      row("insp.angle",sel.hasRot?fmt(sel.rot)+"°":t("val.none")),
+      row("insp.leader",sel.ldr?t("val.yes"):t("val.no")),
+      row("insp.status",sel.veto?t("st.covered"):isMoved(sel)?t("st.modified"):t("st.original"))
+    ].join("\n");
+    else body=[
+      row("insp.type",t("type.code")), row("insp.text",sel.text),
+      row("insp.owner",sel.name),
+      row("insp.quadrant",codeSlot(sel)+" ("+t("was",{v:sel.slot0})+")"),
+      row("insp.status",sel.veto?t("st.covered"):sel.grabbed?t("st.modified"):t("st.original"))
+    ].join("\n");
+  }else if(EXT.sel){
+    const b=EXT.sel;
+    body=b.wrap?[
+      row("insp.type",t("type.block")), row("insp.name",blockLabel(b)),
+      row("insp.offset","dx "+efmt(b.dx)+" / dy "+efmt(b.dy)),
+      row("insp.size",Math.round(b.s*100)+"%"),
+      row("insp.status",b.hits?t("st.hits",{n:b.hits}):t("st.clear"))
+    ].join("\n"):[
+      row("insp.type",t("type.leader")),
+      row("insp.endpoint","dx "+efmt(b.dx)+" / dy "+efmt(b.dy))
+    ].join("\n");
+  }else if(EXT2.sel){
+    const sc=EXT2.sel;
+    body=[row("insp.type",t("type.schem")), row("insp.name",sc.label),
+      row("insp.offset","dx "+efmt(sc.dx)+" / dy "+efmt(sc.dy)),
+      row("insp.status",sc.hits?t("st.hits",{n:sc.hits}):t("st.clear"))].join("\n");
+  }
+  $("#inspectorBody").textContent=body;
+}
+RELABEL.push(updateInspector);
+const baseSelect=select;
+select=function(L,obj,kind){baseSelect(L,obj,kind);EXT.sel=null;EXT2.sel=null;updateInspector();};
+stage.addEventListener("mouseup",()=>setTimeout(updateInspector,0));
+window.addEventListener("keyup",()=>setTimeout(updateInspector,0));
+
+function findStation(){
+  const input=$("#stationSearch").value.trim(),raw=input.toLowerCase();if(!raw){setInfo(t("search.empty"),true);return;}
+  const norm=s=>String(s||"").toLowerCase();
+  const parts=input.split(/[|｜]/).map(s=>s.trim()).filter(Boolean);
+  let L=null;
+  if(parts.length>1){
+    const qn=norm(parts[0]),qc=norm(parts[1]);
+    L=M.labels.find(x=>x.st&&(norm(x.text)===qn||norm(x.st.name)===qn)&&
+      M.codes.some(c=>norm(c.name)===norm(x.st.name)&&norm(c.text)===qc));
+  }
+  if(!L)L=M.labels.find(x=>x.st&&(norm(x.text)===raw||norm(x.st.name)===raw||norm(x.st.code)===raw));
+  if(!L){
+    const exactCodes=M.codes.filter(c=>norm(c.text)===raw);
+    const names=[...new Set(exactCodes.map(c=>c.name))];
+    if(names.length>1){
+      const msg=t("search.ambiguous",{code:input,n:names.length,names:names.join(", ")});
+      $("#inspectorBody").textContent=t("search.results")+"\n"+names.map(n=>"• "+n+" | "+input).join("\n");
+      setInfo(msg,true);return;
+    }
+    if(names.length===1)L=M.labels.find(x=>x.st&&(x.st.name===names[0]||x.text===names[0]));
+  }
+  if(!L)L=M.labels.find(x=>x.st&&(norm(x.text).includes(raw)||norm(x.st.name).includes(raw)||norm(x.st.code).includes(raw)));
+  if(!L){setInfo(t("search.notFound",{q:$("#stationSearch").value}),true);return;}
+  focusOn(L.text+"|"+L.st.code,Math.max(5,zoom));select(L,L,"name");hot(L,L.code);
+  $("#stationSearch").value=L.text+" | "+L.st.code;setInfo(t("search.went",{name:L.text,code:L.st.code}));
+}
+function buildSearch(){
+  const seen=new Set(),opts=[];
+  for(const L of M.labels){if(!L.st)continue;const v=L.text+" | "+L.st.code;if(seen.has(v))continue;seen.add(v);opts.push("<option value=\""+v.replace(/"/g,"&quot;")+"\"></option>");}
+  for(const C of M.codes){const v=C.name+" | "+C.text;if(seen.has(v))continue;seen.add(v);opts.push("<option value=\""+v.replace(/"/g,"&quot;")+"\"></option>");}
+  $("#stationChoices").innerHTML=opts.join("");
+}
+$("#btnSearch").onclick=findStation;
+$("#stationSearch").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();findStation();}});
+
+function applyLayerLocks(){
+  host.classList.toggle("lock-labels",window.__layerLocks.labels);
+  host.classList.toggle("lock-codes",window.__layerLocks.codes);
+  $("#draftStatus").textContent=t("layer.updated");
+}
+for(const cb of document.querySelectorAll("[data-layer]"))cb.onchange=()=>{
+  window.__layerLocks[cb.dataset.layer]=!cb.checked;applyLayerLocks();
+};
+stage.addEventListener("mousedown",e=>{
+  if(window.__layerLocks.labels&&e.target.matches("text.lbl")){e.stopPropagation();e.preventDefault();}
+  if(window.__layerLocks.codes&&e.target.closest("g.boss-code-label")){e.stopPropagation();e.preventDefault();}
+},true);
+
+function draftAvailable(){
+  try{return !!localStorage.getItem(DRAFT_KEY);}catch(e){return false;}
+}
+function refreshDraftStatus(msg){
+  $("#btnRestoreDraft").disabled=!draftAvailable();
+  $("#btnClearDraft").disabled=!draftAvailable();
+  $("#draftStatus").textContent=msg||t(draftAvailable()?"draft.found":"draft.none");
+}
+function saveDraft(){
+  if(!UIH.dirty)return;
+  try{localStorage.setItem(DRAFT_KEY,JSON.stringify(captureState()));UIH.dirty=false;
+      refreshDraftStatus(t("draft.saved",{time:new Date().toLocaleTimeString(
+        LANG==="zh"?"zh-Hant":"en",{hour:"2-digit",minute:"2-digit"})}));}
+  catch(e){refreshDraftStatus(t("draft.failed",{msg:e.message}));}
+}
+function scheduleDraftSave(){if(!UIH.dirty)return;clearTimeout(UIH.saveTimer);UIH.saveTimer=setTimeout(saveDraft,350);}
+$("#btnRestoreDraft").onclick=()=>{try{const s=JSON.parse(localStorage.getItem(DRAFT_KEY)||"null");historyPush(t("hist.beforeDraft"));restoreState(s);UIH.dirty=true;scheduleDraftSave();setInfo(t("draft.restored"));}catch(e){setInfo(t("draft.restoreFail",{msg:e.message}),true);}};
+$("#btnClearDraft").onclick=()=>{try{localStorage.removeItem(DRAFT_KEY);}catch(e){}UIH.dirty=false;refreshDraftStatus(t("draft.cleared"));};
+$("#btnSaveSession").onclick=()=>{
+  const blob=new Blob([JSON.stringify(captureState(),null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="layout-session_"+stamp()+".json";
+  document.body.appendChild(a);a.click();a.remove();setInfo(t("session.saved"));
+};
+$("#btnLoadSession").onclick=()=>$("#sessionFile").click();
+$("#sessionFile").onchange=async e=>{const f=e.target.files[0];if(!f)return;
+  try{const s=JSON.parse(await f.text());historyPush(t("hist.beforeSession"));restoreState(s);saveDraft();setInfo(t("session.loaded",{name:f.name}));}
+  catch(err){setInfo(t("session.loadFail",{msg:err.message}),true);}finally{e.target.value="";}};
+window.addEventListener("mouseup",scheduleDraftSave);
+window.addEventListener("keyup",e=>{if(!["Control","Meta","Shift","Alt"].includes(e.key))scheduleDraftSave();});
+window.addEventListener("beforeunload",saveDraft);
+
+function movedSummary(){
+  const R=exportRows(),blocks=EXT.blocks.filter(b=>b.dx||b.dy||Math.abs(b.s-1)>1e-6);
+  const leaders=EXT.leaders.filter(l=>l.dx||l.dy),schem=EXT2.schem.filter(sc=>sc.dx||sc.dy);
+  const hard=[...R.warn];
+  for(const b of blocks)if(b.hits)hard.push(t("warn.blockHits",{label:blockLabel(b),n:b.hits}));
+  for(const sc of schem){if(sc.hits)hard.push(t("warn.blockHits",{label:sc.label,n:sc.hits}));
+                         if(!sc.key)hard.push(t("warn.schemNoKey",{label:sc.label}));}
+  if(UIH.initialCounts&&window.__counts&&window.__counts.nr>UIH.initialCounts.nr)
+    hard.push(t("warn.moreCrossings",{n:window.__counts.nr-UIH.initialCounts.nr}));
+  return {R,blocks,leaders,schem,hard,text:t("pre.summary",{
+    names:R.nameRows.length, codes:R.codeRows.length, angles:R.angleRows.length,
+    blocks:blocks.length, leaders:leaders.length, schem:schem.length,
+    lines:EXT2.lines.length})};
+}
+function openPreflight(){
+  EXT_OBS=null;recount();extRender();ext2Render();
+  const p=movedSummary();$("#exportText").value=ext2ExportText();
+  $("#exportSummary").className=p.hard.length?"bad":"";
+  $("#exportSummary").innerHTML=(p.hard.length
+      ? "<span class=\"state-symbol\">⚠</span>"+t("pre.fail")+" "+p.hard.join("; ")
+      : "<span class=\"state-symbol\">✓</span>"+t("pre.pass"))
+    + "<br>"+p.text
+    + "<br>"+t("pre.fingerprint",{fp:SOURCE_FINGERPRINT.slice(0,12),v:PANEL_FORMAT_VERSION});
+  $("#btnDown").disabled=!!p.hard.length;$("#exportPane").style.display="flex";$("#btnCloseExp").focus();
+}
+$("#btnExport").onclick=openPreflight;
+
+function runUITest(){
+  const raw=qs.get("uitest");if(!raw)return;
+  const spec=raw==="1"?{ops:[
+    {t:"search",q:"B03"},{t:"name",key:"Cathedral|R06",dx:0,dy:2},
+    {t:"block",id:"title-block",dx:2,dy:0},{t:"undo"},{t:"undo"},{t:"redo"},
+    {t:"layer",name:"codes",locked:true},{t:"preflight"},{t:"draft"}
+  ]}:JSON.parse(raw);
+  const res={ops:[],errors:[]};
+  try{
+    for(const op of (spec.ops||[])){
+      try{
+        if(op.t==="search"){$("#stationSearch").value=op.q;findStation();res.ops.push({search:op.q,selected:sel&&sel.st?sel.st.code:null});}
+        else if(op.t==="name")res.ops.push({name:op.key,result:window.applyMove(op.key,op.dx||0,op.dy||0)});
+        else if(op.t==="block")res.ops.push({block:op.id,result:window.moveBlock(op.id,op.dx||0,op.dy||0)});
+        else if(op.t==="undo"){historyUndo();res.ops.push({undo:true});}
+        else if(op.t==="redo"){historyRedo();res.ops.push({redo:true});}
+        else if(op.t==="layer"){window.__layerLocks[op.name]=!!op.locked;applyLayerLocks();res.ops.push({layer:op.name,locked:!!op.locked});}
+        else if(op.t==="preflight"){openPreflight();res.ops.push({preflight:$("#exportSummary").textContent,downloadDisabled:$("#btnDown").disabled});}
+        else if(op.t==="draft"){saveDraft();res.ops.push({draft:draftAvailable()});}
+      }catch(e){res.errors.push(String(e.message||e));}
+    }
+    const L=M.byKey.get("Cathedral|R06"),B=EXT.blocks.find(x=>x.id==="title-block");
+    res.state={labelMoved:L?isMoved(L):null,blockDx:B?B.dx:null,undo:UIH.undo.length,redo:UIH.redo.length,
+      inspector:$("#inspectorBody").textContent,source:SOURCE_FINGERPRINT,format:PANEL_FORMAT_VERSION,
+      dockChildren:[...$("#rightDock").children].map(x=>x.id),downloadDisabled:$("#btnDown").disabled};
+  }catch(e){res.errors.push("uitest："+String(e.message||e));}
+  const pre=document.createElement("pre");pre.id="uitestresult";pre.textContent=JSON.stringify(res);pre.style.display="none";
+  document.body.appendChild(pre);
+}
+
+$("#btnUndo").onclick=historyUndo;$("#btnRedo").onclick=historyRedo;
+window.addEventListener("keydown",e=>{
+  if(e.target && e.target.closest && e.target.closest("input,textarea")) return;
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){
+    e.preventDefault();e.stopImmediatePropagation();e.shiftKey?historyRedo():historyUndo();
+  }else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="y"){
+    e.preventDefault();e.stopImmediatePropagation();historyRedo();
+  }
+},true);
+
+/* Reset means every layer returns to the boot baseline, not just names. */
+window.resetAll=()=>{historyPush(t("hist.reset"));restoreState(UIH.baseline);setInfo(t("reset.done"));};
+$("#btnReset").onclick=window.resetAll;
+
+function initMaturity(){
+  if(!window.__ready||!window.__ext||typeof EXT2==="undefined"){setTimeout(initMaturity,120);return;}
+  for(const id of ["ext2Pane","extPane"]){const el=$("#"+id);if(el)$("#rightDock").appendChild(el);}
+  applyStaticI18n();   /* these panes live after script 1, so translate them now */
+  buildSearch();recount();UIH.initialCounts=Object.assign({},window.__counts);
+  UIH.baseline=captureState();updateHistoryButtons();updateInspector();refreshDraftStatus();
+  window.__maturity={captureState,restoreState,historyPush,historyUndo,historyRedo,movedSummary,
+    source:SOURCE_FINGERPRINT,format:PANEL_FORMAT_VERSION};
+  runUITest();
+}
+initMaturity();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+name: self-test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@v1
+        id: chrome
+
+      - name: The demo map is exactly what the generator produces
+        run: |
+          python3 tools/make_demo_map.py
+          git diff --exit-code demo/demo-map.svg
+
+      - name: Run the self-test
+        run: python3 tools/selftest.py --chrome "${{ steps.chrome.outputs.chrome-path }}"
