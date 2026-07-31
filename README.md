@@ -301,7 +301,9 @@ moment of the drag.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Contributions welcome; please read
+[CONTRIBUTING.md](CONTRIBUTING.md) first — several apparent gaps in this
+tool are deliberate, and that file says which ones and why.
 
 Techniques used and their canonical sources are listed in
 [CREDITS.md](CREDITS.md). No third-party code, fonts or images are bundled;

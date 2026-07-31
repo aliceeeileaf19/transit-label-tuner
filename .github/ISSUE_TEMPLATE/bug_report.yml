@@ -1,0 +1,57 @@
+name: Bug report
+description: Something behaves differently from what the README describes.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: does it also happen on the bundled demo map
+        (`http://localhost:8000/` with no `?svg=`)? That one answer usually
+        decides whether this is a tool bug or a map-contract mismatch.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected instead
+    validations: {required: true}
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open http://localhost:8000/?lang=en
+        2. Drag the "Cathedral" label down by about 20 units
+        3. Press Export move list
+    validations: {required: true}
+  - type: dropdown
+    id: map
+    attributes:
+      label: Which diagram
+      options:
+        - The bundled demo map
+        - My own diagram (demo map is fine)
+        - My own diagram (have not tried the demo map)
+    validations: {required: true}
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and operating system
+      placeholder: Safari 18.5 / macOS 15.5
+    validations: {required: true}
+  - type: textarea
+    id: console
+    attributes:
+      label: Console output
+      description: Anything the browser console printed. Paste it verbatim.
+      render: text
+  - type: textarea
+    id: selftest
+    attributes:
+      label: Self-test result
+      description: Output of `python3 tools/selftest.py`, if you were able to run it.
+      render: text
+  - type: textarea
+    id: config
+    attributes:
+      label: Your CONFIG, if you changed it
+      description: Only needed when the bug involves your own diagram.
+      render: javascript

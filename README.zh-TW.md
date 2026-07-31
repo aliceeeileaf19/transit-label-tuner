@@ -266,7 +266,8 @@ python3 tools/make_demo_map.py     # 重新產生示範路網
 
 ## 授權
 
-MIT，見 [LICENSE](LICENSE)。
+MIT，見 [LICENSE](LICENSE)。歡迎貢獻，動手前請先看 [CONTRIBUTING.md](CONTRIBUTING.md)——
+這支工具有幾個「看起來像漏洞」的地方其實是刻意的，那份文件寫了是哪些、以及為什麼。
 
 用到的技術方法與其權威出處列在 [CREDITS.md](CREDITS.md)。本工具不內含任何第三方程
 式碼、字型或圖片，無相依套件，也不發出任何網路請求。
