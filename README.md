@@ -4,13 +4,14 @@ A single-file, offline editor for the *last mile* of a transit diagram: the
 station names, the code tags, the leader lines and the layout blocks that a
 generator can position approximately but never quite right.
 
-[繁體中文說明 → README.zh-TW.md](README.zh-TW.md)
+> **In one sentence:** it lets a human finish a generated transit diagram,
+> then turns those visual decisions into data the generator can replay.
 
-**[Live demo →](https://aliceeeileaf19.github.io/transit-label-tuner/)**
+[繁體中文說明 → README.zh-TW.md](README.zh-TW.md)
 
 ![The tool with the demo network loaded](docs/screenshot-en.png)
 
-<sub>Light and dark themes, English and Traditional Chinese — [dark theme](docs/screenshot-dark.png)</sub>
+<sub>Four verified combinations — [English dark](docs/screenshot-dark.png) · [Traditional Chinese light](docs/screenshot-zh.png) · [Traditional Chinese dark](docs/screenshot-zh-dark.png)</sub>
 
 **It never writes SVG.** You drag things until the diagram reads well, and the
 tool exports a *move list* — a plain-text table of offsets. Your own generator
@@ -28,6 +29,13 @@ stays reviewable, diffable and replayable.
 That loop is the whole point. Hand-editing the output of a generator is a
 one-way door: the next regeneration throws your work away. A move list
 survives regeneration.
+
+## Who it is for
+
+This is a specialist tool for people who generate transit or network diagrams
+from code and still need a human eye for the final five percent. It is not a
+general SVG editor and it is not a journey-planning app. Its job is narrower:
+make manual layout judgement reproducible instead of disposable.
 
 ---
 
@@ -55,6 +63,17 @@ http://localhost:8000/?svg=path/to/your-diagram.svg
 
 …and edit the `CONFIG` block at the top of `index.html` so the selectors match
 your markup. See [The map contract](#the-map-contract).
+
+### SVG trust boundary
+
+Only open SVG files you trust. Before insertion, the tool parses the file as
+SVG and removes scripts, event handlers, embedded HTML, animation elements and
+external resource URLs. That is defence in depth, not a general-purpose
+sandbox for hostile files. Removed active content is reported in the interface.
+
+There is no telemetry and no third-party service receives your diagram. The
+browser fetches only the SVG URL you selected and stores interface preferences
+and diagram-specific drafts in local storage.
 
 Interface language follows your browser and theme follows your operating
 system; both can be switched from the header and are remembered. Add
@@ -151,14 +170,14 @@ Everything diagram-specific lives in one `CONFIG` object at the top of
 | `schematic` | Marker regex, anchor keys, corner setback for proposal boxes |
 | `limits` | Max offset, panel area ratio, leader binding tolerances |
 | `formatVersion` | Bumped when the move-list format changes; drafts check it |
-| `sourceFingerprint` | Replace with the SHA-256 of your SVG at packaging time |
+| `sourceFingerprint` | Optional packaged SHA-256; the browser computes one when the placeholder is left intact |
 
 ### About `sourceFingerprint`
 
-Ships as the literal `__SOURCE_SHA256__`. Drafts and session files are keyed
-to it, so replacing it in your build step is what stops a draft made against
-one revision of a diagram from being applied to another. If you never
-substitute it, drafts still work — they just stop distinguishing revisions.
+Ships as the literal `__SOURCE_SHA256__`. You may replace it with the SVG's
+SHA-256 in a packaging step. If you leave the placeholder intact, the browser
+hashes the fetched SVG at load time instead (with a deterministic fallback
+where Web Crypto is unavailable), so drafts still stay separated by revision.
 
 ---
 
@@ -236,7 +255,7 @@ URL parameters drive them in batch and publish JSON into hidden `<pre>` nodes:
 | `?uitest=` | `#uitestresult` |
 
 ```sh
-python3 tools/selftest.py          # 17 checks, headless Chrome
+python3 tools/selftest.py          # 20 checks, headless Chrome
 python3 tools/make_demo_map.py     # regenerate the demo network
 ```
 
@@ -307,4 +326,4 @@ tool are deliberate, and that file says which ones and why.
 
 Techniques used and their canonical sources are listed in
 [CREDITS.md](CREDITS.md). No third-party code, fonts or images are bundled;
-the tool has no dependencies and makes no network requests.
+the tool has no dependencies, telemetry or third-party network service.

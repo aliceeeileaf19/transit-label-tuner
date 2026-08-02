@@ -3,13 +3,13 @@
 單檔、離線的路網圖「最後一哩」編輯器：站名、站碼、引線與版面區塊——這些程式能排到
 大致正確、但永遠差最後一點的東西。
 
-[English → README.md](README.md)
+> **一句話說明：**讓人完成程式產生的路網圖，再把這些視覺判斷轉成產圖程式可以重播的資料。
 
-**[線上試用 →](https://aliceeeileaf19.github.io/transit-label-tuner/)**
+[English → README.md](README.md)
 
 ![載入示範路網的工具畫面](docs/screenshot-zh.png)
 
-<sub>淺色／深色主題、英文／繁體中文皆可即時切換——[深色主題](docs/screenshot-dark.png)</sub>
+<sub>四種組合皆已驗證——[中文深色](docs/screenshot-zh-dark.png) · [英文淺色](docs/screenshot-en.png) · [英文深色](docs/screenshot-dark.png)</sub>
 
 **它不產出 SVG。** 你拖到圖好看為止，工具匯出一份**搬動清單**（純文字的位移表），
 再由你自己的產圖程式重新繪製。成品因此永遠是機器生成、可重現的，而人做的判斷則變成
@@ -24,6 +24,12 @@
 
 這個迴圈就是全部的重點。手改產圖程式的輸出是一扇單向門：下次重新產圖，你的工作就沒
 了。搬動清單活得過重新產圖。
+
+## 這是給誰用的
+
+這是一個專門工具，給「用程式產生路網圖或網路圖，但最後百分之五仍需要人眼判斷」的人。
+它不是通用 SVG 編輯器，也不是乘客查路線的 App；它只專心做一件事：讓人工排版判斷可以
+被程式重現，而不是下次產圖就消失。
 
 ---
 
@@ -49,6 +55,15 @@ http://localhost:8000/?svg=path/to/your-diagram.svg
 
 ……並修改 `index.html` 最上方的 `CONFIG`，讓選擇器對得上你的標記。見
 [地圖規格](#地圖規格)。
+
+### SVG 信任邊界
+
+只開啟你信任的 SVG。工具會先用 SVG 模式解析檔案，移除 script、事件屬性、嵌入 HTML、
+動畫元素與外部資源網址，再放進頁面；介面會提示移除了幾項。這是額外防護，不代表它是
+可以安全分析任意惡意檔案的通用沙盒。
+
+工具沒有遙測，也不會把地圖送到第三方服務。瀏覽器只讀取你指定的 SVG 網址，並在本機
+儲存介面偏好與各圖稿的草稿。
 
 介面語言預設跟隨瀏覽器、配色主題預設跟隨作業系統，兩者都可以在標題列切換並會記住。
 加 `?lang=zh|en` 或 `?theme=dark|light` 可強制指定。
@@ -134,13 +149,13 @@ http://localhost:8000/?svg=path/to/your-diagram.svg
 | `schematic` | 示意框的標記正則、anchor key、圓角 setback |
 | `limits` | 位移上限、面板面積比例、引線綁定容差 |
 | `formatVersion` | 搬動清單格式改版時遞增；草稿會檢查 |
-| `sourceFingerprint` | 打包時換成你 SVG 的 SHA-256 |
+| `sourceFingerprint` | 可在打包時填入 SVG 的 SHA-256；保留 placeholder 時瀏覽器會自行計算 |
 
 ### 關於 `sourceFingerprint`
 
-出廠值是字面上的 `__SOURCE_SHA256__`。草稿與工作階段檔案都綁在它上面，所以「在建置
-步驟把它換掉」正是防止「對某版圖做的草稿被套到另一版圖」的機制。不換也能用，只是草
-稿就分不出版本了。
+出廠值是字面上的 `__SOURCE_SHA256__`。你可以在建置步驟換成 SVG 的 SHA-256；若保留
+placeholder，瀏覽器會在載入 SVG 時自行計算指紋（Web Crypto 不可用時改用固定的雜湊
+fallback），因此不同圖稿版本仍會使用不同的草稿與工作階段識別。
 
 ---
 
@@ -214,7 +229,7 @@ URL 參數可批次驅動它們，結果以 JSON 寫進隱藏的 `<pre>` 節點�
 | `?uitest=` | `#uitestresult` |
 
 ```sh
-python3 tools/selftest.py          # 17 項檢查，用無頭 Chrome
+python3 tools/selftest.py          # 20 項檢查，用無頭 Chrome
 python3 tools/make_demo_map.py     # 重新產生示範路網
 ```
 
@@ -270,4 +285,4 @@ MIT，見 [LICENSE](LICENSE)。歡迎貢獻，動手前請先看 [CONTRIBUTING.m
 這支工具有幾個「看起來像漏洞」的地方其實是刻意的，那份文件寫了是哪些、以及為什麼。
 
 用到的技術方法與其權威出處列在 [CREDITS.md](CREDITS.md)。本工具不內含任何第三方程
-式碼、字型或圖片，無相依套件，也不發出任何網路請求。
+式碼、字型或圖片，無相依套件、無遙測，也不連接第三方網路服務。

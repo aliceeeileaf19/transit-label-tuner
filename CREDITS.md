@@ -11,9 +11,11 @@ description is cited so you can check the implementation against it.
 原始定義去核對實作是否正確。
 
 No third-party code, fonts, icons or images are bundled. The tool has no
-dependencies and makes no network requests.
+dependencies, telemetry or third-party network service; it fetches only the
+SVG URL selected by the user.
 
-本工具不內含任何第三方程式碼、字型、圖示或圖片，無相依套件，也不發出任何網路請求。
+本工具不內含任何第三方程式碼、字型、圖示或圖片，無相依套件、無遙測，也不連接第三方
+網路服務；它只讀取使用者指定的 SVG 網址。
 
 ---
 

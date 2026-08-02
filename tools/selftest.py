@@ -46,22 +46,61 @@ def find_chrome(explicit):
 
 
 def serve(port):
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler,
+    class QuietHandler(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            if self.path.split("?", 1)[0] == "/__unsafe.svg":
+                demo = (ROOT / "demo" / "demo-map.svg").read_text(encoding="utf-8")
+                demo = demo.replace(
+                    "<svg ", '<svg onload="globalThis.__unsafeProbe=1" ', 1)
+                active = """
+  <script>globalThis.__unsafeProbe=2</script>
+  <foreignObject width="10" height="10"><div xmlns="http://www.w3.org/1999/xhtml"
+    onmouseover="globalThis.__unsafeProbe=3">active HTML</div></foreignObject>
+  <style>@import url(https://example.invalid/x.css); .probe{fill:url(https://example.invalid/x)}</style>
+  <image width="1" height="1" href="https://example.invalid/pixel.png"/>
+"""
+                demo = demo.rsplit("</svg>", 1)[0] + active + "</svg>"
+                data = demo.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "image/svg+xml; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            super().do_GET()
+
+    handler = functools.partial(QuietHandler,
                                 directory=str(ROOT))
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
-    httpd.log_message = lambda *a, **k: None
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return httpd
 
 
-def dump_dom(chrome, url):
+def dump_dom(chrome, url, window_size=None):
     # Deliberately no --user-data-dir: a fresh profile makes Chrome spend the
     # whole virtual-time budget on first-run setup and the page never boots.
-    out = subprocess.run(
-        [chrome, "--headless", "--disable-gpu", "--no-sandbox",
-         "--virtual-time-budget=15000", "--dump-dom", url],
-        capture_output=True, text=True, timeout=180)
-    return out.stdout
+    cmd = [chrome, "--headless", "--disable-gpu", "--no-sandbox",
+           "--disable-background-networking", "--disable-component-update",
+           "--no-first-run", "--disable-default-apps",
+           "--virtual-time-budget=15000", "--dump-dom"]
+    if window_size:
+        cmd.append("--window-size=" + window_size)
+    cmd.append(url)
+    failures = []
+    for attempt in range(2):
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            if out.returncode == 0 and out.stdout:
+                return out.stdout
+            failures.append("exit %s: %s" % (out.returncode, out.stderr[-300:]))
+        except subprocess.TimeoutExpired:
+            failures.append("timed out after 60 seconds")
+        if attempt == 0:
+            print("           Chrome did not finish; retrying this check once")
+    raise RuntimeError("Chrome failed twice: " + " | ".join(failures))
 
 
 def unescape(s):
@@ -191,21 +230,28 @@ def _(run):
     r = run(exttest={"ops": [{"k": "block", "id": "legend", "dx": -40, "dy": 0}]})
     assert not r["errors"], r["errors"]
     assert r["ops"][0]["dx"] == -40, r["ops"][0]
+    assert r["ops"][0]["hits"] > 0, r["ops"][0]
     ids = [b["id"] for b in r["state"]["blocks"]]
     assert ids == ["title-block", "legend", "under-construction", "outlying", "notes"], ids
+    legend = next(b for b in r["state"]["blocks"] if b["id"] == "legend")
+    assert legend["dx"] == -40 and legend["hits"] == r["ops"][0]["hits"], legend
     return "5 blocks, legend dx=%s hits=%s" % (r["ops"][0]["dx"], r["ops"][0]["hits"])
 
 
 @check("proposal boxes export an anchor, unkeyed ones export a warning")
 def _(run):
-    r = run(ext2test={"ops": [{"k": "schem", "key": "Harbour Line|Phase 2",
-                               "dx": 10, "dy": 5}]})
+    r = run(ext2test={"ops": [
+        {"k": "schem", "key": "Harbour Line|Phase 2", "dx": 10, "dy": 5},
+        {"k": "schemIndex", "i": 1, "dx": 4, "dy": 3},
+    ]})
     assert not r["errors"], r["errors"]
     assert "SCHEMATIC_ANCHOR" in r["state"]["text"]
     assert "Harbour Line|Phase 2" in r["state"]["text"]
     boxes = r["state"]["schem"]
     assert len(boxes) == 2, boxes
     assert sum(1 for b in boxes if b["key"]) == 1, boxes
+    assert r["ops"][0]["anchor"] == [35, 305], r["ops"][0]
+    assert "has no key in CONFIG.schematic.keys" in r["state"]["text"], r["state"]["text"]
     return "2 boxes found, 1 keyed, anchor=%s" % (r["ops"][0]["anchor"],)
 
 
@@ -226,9 +272,18 @@ def _(run):
     r = run(uitest="1")
     assert not r["errors"], r["errors"]
     st = r["state"]
-    assert st["dockChildren"], st
-    assert st["undo"] >= 0 and st["redo"] >= 0, st
-    assert st["draft"] is not False if "draft" in st else True
+    assert st["dockChildren"] == ["searchPane", "layerPane", "inspector", "sessionPane",
+                                  "counts", "ext2Pane", "extPane"], st["dockChildren"]
+    assert st["undo"] == 1 and st["redo"] == 1, st
+    assert st["draft"] is True, st
+    assert st["semanticClasses"] == {"stations": 19, "labels": 19, "codes": 21}, st
+    assert st["codePointer"] == "none", st["codePointer"]
+    assert st["source"] != "__SOURCE_SHA256__" and len(st["source"]) >= 16, st["source"]
+    alt = run(uitest={"ops": [{"t": "layer", "name": "codes", "locked": True}]},
+              selectortest="attrs")
+    assert not alt["errors"], alt["errors"]
+    assert alt["state"]["semanticClasses"] == {"stations": 19, "labels": 19, "codes": 21}, alt
+    assert alt["state"]["codePointer"] == "none", alt["state"]
     return "undo=%s redo=%s dock=%d panes" % (
         st["undo"], st["redo"], len(st["dockChildren"]))
 
@@ -243,6 +298,7 @@ def _(run):
     ]})
     assert not r["errors"], r["errors"]
     assert "not defined" not in json.dumps(r), r
+    assert r["state"]["movedNames"] == 0 and r["state"]["movedCodes"] == 0, r["state"]
     return "undo/redo/undo clean"
 
 
@@ -255,9 +311,12 @@ def _(run):
     a = en["state"]["inspector"]
     b = zh["state"]["inspector"]
     assert a and b and a != b, (a, b)
+    assert not en["state"]["missingI18n"] and not zh["state"]["missingI18n"], \
+        (en["state"]["missingI18n"], zh["state"]["missingI18n"])
     assert not re.search(r"[a-z]+\.[a-z]+", b.split("\n")[0]), \
         "untranslated key leaked into the Chinese inspector: %r" % b
-    return "en=%r / zh=%r" % (a.split("\n")[0][:28], b.split("\n")[0][:28])
+    return "en=%r / zh=%r; no visible key fallbacks" % (
+        a.split("\n")[0][:28], b.split("\n")[0][:28])
 
 
 @check("both themes resolve their tokens, and the map keeps its own paper")
@@ -274,6 +333,7 @@ def _(run):
         t = r["state"]["tokens"]
         missing = [k for k, v in t.items() if not v.strip()]
         assert not missing, "%s theme has unresolved tokens: %s" % (name, missing)
+        assert len(t) >= 140, "%s only exposed %d theme tokens" % (name, len(t))
     assert light["state"]["paper"] == dark["state"]["paper"], \
         "the artwork background must not change with the theme"
     return "light/dark both resolve %d tokens, paper=%s" % (
@@ -282,13 +342,43 @@ def _(run):
 
 @check("the exported move list carries no interface language")
 def _(run):
-    r = run(test={"ops": [{"t": "name", "key": "Old Mill|R03", "dx": 0, "dy": 4}]},
+    r = run(uitest={"ops": [{"t": "name", "key": "Central Exchange|R04",
+                              "dx": 0, "dy": 100}]},
             lang="zh")
-    text = r["text"]
-    assert not re.search(r"[一-鿿]", text), \
-        "CJK leaked into the machine-readable export"
+    text = r["state"]["exportText"]
+    assert not re.search(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", text), \
+        "CJK interface text leaked into the machine-readable export"
     assert "NAME_MOVES" in text
-    return "%d bytes, ASCII only" % len(text)
+    return "%d bytes, English format only" % len(text)
+
+
+@check("HTML-looking search input stays text, not DOM")
+def _(run):
+    payload = '<b id="xss-probe">probe</b>'
+    r = run(uitest={"ops": [{"t": "search", "q": payload}]}, lang="zh")
+    assert not r["errors"], r["errors"]
+    assert r["state"]["probeExists"] is False, r["state"]["infoHTML"]
+    assert "&lt;b" in r["state"]["infoHTML"], r["state"]["infoHTML"]
+    return r["state"]["infoHTML"][:80]
+
+
+@check("active content is removed from a loaded SVG")
+def _(run):
+    r = run(uitest={"ops": []}, svg="__unsafe.svg")
+    assert not r["errors"], r["errors"]
+    assert r["state"]["unsafeProbe"] == 0, r["state"]
+    assert r["state"]["sanitized"] >= 5, r["state"]
+    assert "Potentially active SVG content was removed" in r["state"]["infoHTML"], \
+        r["state"]["infoHTML"]
+    return "%d active elements/attributes removed; no script ran" % r["state"]["sanitized"]
+
+
+@check("Fit keeps the map clear of the bottom dock on a narrow viewport")
+def _(run):
+    r = run(uitest={"ops": []}, _window_size="900,800")
+    assert not r["errors"], r["errors"]
+    assert r["state"]["mapDockOverlap"] is False, r["state"]
+    return "900x800 map and dock do not overlap"
 
 
 # --------------------------------------------------------------------------
@@ -297,6 +387,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--chrome")
     ap.add_argument("--port", type=int, default=8791)
+    ap.add_argument("--match", help="run only checks whose name contains this text")
     args = ap.parse_args()
 
     chrome = find_chrome(args.chrome)
@@ -304,12 +395,13 @@ def main():
     base = "http://127.0.0.1:%d/index.html" % args.port
 
     def run(**params):
+        window_size = params.pop("_window_size", None)
         q = {}
         for k, v in params.items():
             q[k] = v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
         q.setdefault("lang", "en")
         url = base + "?" + urllib.parse.urlencode(q)
-        dom = dump_dom(chrome, url)
+        dom = dump_dom(chrome, url, window_size=window_size)
         for key, node in (("uitest", "uitestresult"), ("ext2test", "ext2result"),
                           ("exttest", "extresult"), ("test", "testresult")):
             if key in q:
@@ -326,8 +418,13 @@ def main():
     print("  chrome : %s" % chrome)
     print("  serving: %s\n" % ROOT)
 
+    selected = [(name, fn) for name, fn in CHECKS
+                if not args.match or args.match.lower() in name.lower()]
+    if not selected:
+        httpd.shutdown()
+        sys.exit("No check matched %r" % args.match)
     failed = 0
-    for i, (name, fn) in enumerate(CHECKS, 1):
+    for i, (name, fn) in enumerate(selected, 1):
         try:
             detail = fn(run)
             print("  %2d. PASS  %s" % (i, name))
@@ -339,7 +436,7 @@ def main():
             print("           %s: %s" % (type(e).__name__, e))
 
     httpd.shutdown()
-    print("\n%d/%d passed" % (len(CHECKS) - failed, len(CHECKS)))
+    print("\n%d/%d passed" % (len(selected) - failed, len(selected)))
     return 1 if failed else 0
 
 

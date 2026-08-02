@@ -8,7 +8,7 @@
 
 ## Checks
 
-- [ ] `python3 tools/selftest.py` passes (17 checks)
+- [ ] `python3 tools/selftest.py` passes (20 checks)
 - [ ] If the demo network changed, it was regenerated with
       `python3 tools/make_demo_map.py` rather than hand-edited
 - [ ] If an interaction was added, it has a `window.*` hook that runs the same
@@ -17,6 +17,7 @@
       and exists in both `en` and `zh`
 - [ ] If a theme-dependent value was added, it is a custom property declared
       in both theme blocks, not a raw colour in a rule
+- [ ] If SVG loading changed, active-content removal still has a regression test
 
 ## Screenshots
 

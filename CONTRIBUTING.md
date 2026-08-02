@@ -26,7 +26,7 @@ block that on the file protocol. Any static server is fine.
 ## Before you open a pull request
 
 ```sh
-python3 tools/selftest.py        # 17 headless checks
+python3 tools/selftest.py        # 20 headless checks
 ```
 
 It needs Chrome or Chromium; pass `--chrome /path/to/binary` if it cannot find
@@ -85,6 +85,11 @@ intermittently, which is miserable to diagnose.
 edited, not part of the interface. The drag-state colours (`.dt-*`) are drawn
 on that paper and are theme-independent for the same reason.
 
+**SVG input is data, never application code.** Keep all map loading through
+`parseSafeSvg()`. It removes active elements, event handlers and external
+resource URLs before adoption into the page. Do not restore direct
+`innerHTML` insertion, and add a regression probe when the boundary changes.
+
 ---
 
 ## How to make common changes
@@ -133,7 +138,7 @@ formatter; there is also not much code.
 
 - **跑起來**：`python3 -m http.server 8000`，然後開 `http://localhost:8000/`。
   沒有任何安裝步驟。`file://` 不能用（`fetch()` 會被瀏覽器擋）。
-- **送 PR 前**：`python3 tools/selftest.py`（17 項，需要 Chrome）。
+- **送 PR 前**：`python3 tools/selftest.py`（20 項，需要 Chrome）。
 - **動過示範圖**：跑 `python3 tools/make_demo_map.py` 重生，**不要手改 SVG**。
   CI 會比對產生器輸出，手改一定失敗。
 - **換自己的地圖**：只改 `index.html` 最上方的 `CONFIG`。如果有跟地圖相關的東西
@@ -144,3 +149,5 @@ formatter; there is also not much code.
   產生器產生、吸附刻意拒絕圖面上原本不存在的值、匯出的清單固定英文、每個互動都要有
   走同一條路徑的程式化入口、讓出畫格一律用 `nextFrame()` 而不是裸的
   `requestAnimationFrame`、地圖在兩種主題下都維持淺色紙面。
+- **SVG 是資料，不是程式**：載入必須通過 `parseSafeSvg()`，不可改回直接塞入
+  `innerHTML`。

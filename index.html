@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="A reproducible last-mile label editor for generated transit diagrams.">
 <title>Transit Label Tuner</title>
 <style>
   /* ===================================================================
@@ -96,7 +97,9 @@
     --dock-head-pad:9px 15px 10px;
     --dock-pane-pad:13px 15px;
     --dock-b-fg:#25292a; --dock-b-size:11.5px; --dock-b-weight:650;
-    --scroll-thumb:rgba(30,35,36,.18);
+    --dock-blur:blur(13px) saturate(108%);
+    --dock-item-rule:rgba(20,24,25,.08); --dock-arrow-fg:#8ba400;
+    --scroll-thumb:rgba(30,35,36,.18); --scroll-color:rgba(30,35,36,.18);
 
     --input-bg:rgba(255,255,255,.78); --input-border:rgba(20,24,25,.11);
     --input-radius:9px; --input-fg:#151819;
@@ -204,7 +207,9 @@
     --dock-head-pad:7px 13px 8px;
     --dock-pane-pad:12px 14px;
     --dock-b-fg:#eef6ff; --dock-b-size:11px; --dock-b-weight:750;
-    --scroll-thumb:rgba(145,190,245,.28);
+    --dock-blur:blur(18px) saturate(125%);
+    --dock-item-rule:rgba(117,210,244,.12); --dock-arrow-fg:#64c9ff;
+    --scroll-thumb:rgba(145,190,245,.28); --scroll-color:rgba(105,205,241,.24);
 
     --input-bg:rgba(1,10,17,.58); --input-border:rgba(117,210,244,.18);
     --input-radius:4px; --input-fg:var(--text);
@@ -251,7 +256,7 @@
 
   /* Interaction states are class-only — never a geometry attribute — and are
      drawn on the artwork, so they stay constant across themes. */
-  .lbl,.stn-code text,.boss-code-label text{cursor:move}
+  .tlt-label,.tlt-code-group text{cursor:move}
   .dt-hot{fill:#0a58ca !important}
   .dt-hot-ldr{stroke:#0a58ca !important;stroke-width:1.6 !important}
   .dt-sel{fill:#b8860b !important}
@@ -347,8 +352,8 @@
     pointer-events:auto;padding:var(--dock-pad);
     border:var(--dock-border);border-right:var(--dock-border-right);border-radius:var(--dock-radius);
     background:var(--dock-bg);box-shadow:var(--dock-shadow);
-    -webkit-backdrop-filter:var(--pane-blur);backdrop-filter:var(--pane-blur);
-    scrollbar-width:thin;scrollbar-color:var(--scroll-thumb) transparent}
+    -webkit-backdrop-filter:var(--dock-blur);backdrop-filter:var(--dock-blur);
+    scrollbar-width:thin;scrollbar-color:var(--scroll-color) transparent}
   #rightDock:before{content:var(--dock-label,"LAYOUT CONTROLS");display:block;flex:0 0 auto;
     padding:var(--dock-head-pad);border-bottom:1px solid var(--dock-rule);
     color:var(--dock-head-fg);font:700 var(--dock-head-size) ui-monospace,SFMono-Regular,monospace;
@@ -356,7 +361,7 @@
   #rightDock::-webkit-scrollbar{width:5px}
   #rightDock::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border-radius:99px}
   #rightDock>.pane{position:static!important;width:auto!important;flex:0 0 auto;pointer-events:auto;
-    border:0;border-bottom:1px solid var(--dock-rule);border-radius:0;background:transparent;
+    border:0;border-bottom:1px solid var(--dock-item-rule);border-radius:0;background:transparent;
     box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
   #rightDock>.pane:last-child{border-bottom:0}
   #rightDock>.pane:before{display:none}
@@ -366,7 +371,7 @@
   #rightDock details>summary{cursor:pointer;list-style:none}
   #rightDock details>summary::-webkit-details-marker{display:none}
   #rightDock details>summary:before{content:"›";display:inline-block;margin-right:7px;
-    color:var(--accent-deep);font-size:16px;line-height:10px;transform:rotate(0);
+    color:var(--dock-arrow-fg);font-size:16px;line-height:10px;transform:rotate(0);
     transition:transform .15s ease}
   #rightDock details[open]>summary:before{transform:rotate(90deg)}
 
@@ -412,8 +417,8 @@
   #exportSummary.bad{border-color:var(--bad-border);background:var(--bad-bg);color:var(--bad-fg);
     font-weight:700}
 
-  .lock-labels text.lbl,.lock-codes g.stn-code text,
-  .lock-codes g.boss-code-label text{pointer-events:none!important;cursor:not-allowed!important}
+  .lock-labels .tlt-label,.lock-codes .tlt-code-group text{
+    pointer-events:none!important;cursor:not-allowed!important}
   .lock-blocks g.ext-wrap{pointer-events:none!important}
   .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;
     margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;
@@ -630,8 +635,9 @@ const CONFIG = {
 
   formatVersion: "2",
 
-  /* Replaced by your packaging step with the SHA-256 of the source SVG, so a
-     draft or session file can never be applied to a different drawing. */
+  /* May be replaced by a packaging step with the source SVG's SHA-256. When
+     left as the placeholder, boot computes a fingerprint from the fetched
+     SVG so drafts remain isolated by drawing revision. */
   sourceFingerprint: "__SOURCE_SHA256__"
 };
 
@@ -640,10 +646,18 @@ const SLOTS = CONFIG.slots;
 const SNAP_ANGLES = CONFIG.snapAngles;
 const SEL = CONFIG.selectors;
 const PANEL_FORMAT_VERSION = CONFIG.formatVersion;
-const SOURCE_FINGERPRINT = CONFIG.sourceFingerprint;
+let SOURCE_FINGERPRINT = CONFIG.sourceFingerprint;
 
 const qs = new URLSearchParams(location.search);
 const SVG_PATH = qs.get("svg") || CONFIG.defaultSvg;
+/* Test-only alternate selectors prove that behaviour follows CONFIG rather
+   than the demo map's class names. They describe the same demo structure by
+   attributes and container ids. */
+if(qs.get("selectortest")==="attrs") Object.assign(SEL,{
+  station:"g[data-name][data-code][data-x][data-y]",
+  label:"#labels > text",codeGroup:"g[data-station-x][data-station-y]",
+  leader:"#leaders > line",route:'#routes > path:not([class$="-casing"])'
+});
 
 const $ = s => document.querySelector(s);
 const stage = $("#stage"), host = $("#host");
@@ -677,10 +691,12 @@ const I18N = {
     "boot.step.index": "Indexing stations and labels…",
     "boot.err.notSvg": "No <svg> element in {path}",
     "boot.err.load": "Could not load {path}",
+    "boot.err.unsafeSvg": "{path} is not a valid standalone SVG",
     "boot.err.outerSize": "Canvas never reported a real size (container is 0×0)",
     "boot.err.innerSize": "Inner map SVG never reported a real size",
     "boot.err.ctm": "Could not compute the inner map transform",
     "boot.loaded": "Loaded: {stations} stations / {labels} names / {codes} codes / {leaders} leaders / {panels} panels. Hover a name to see its code and leader.",
+    "boot.sanitized": " Potentially active SVG content was removed ({n} items).",
     "boot.checking": "Map is ready. Collision checking is running in the background; export unlocks when it finishes.",
     "boot.exportWhenDone": "Available once the background collision check finishes",
 
@@ -871,10 +887,12 @@ const I18N = {
     "boot.step.index": "正在建立站點與標籤索引…",
     "boot.err.notSvg": "{path} 裡沒有 <svg>",
     "boot.err.load": "載入不到 {path}",
+    "boot.err.unsafeSvg": "{path} 不是有效的獨立 SVG",
     "boot.err.outerSize": "等不到畫布的真實尺寸（容器 0×0）",
     "boot.err.innerSize": "等不到內層地圖 SVG 的真實尺寸",
     "boot.err.ctm": "算不出內層地圖的座標轉換",
     "boot.loaded": "已載入：站點 {stations}／站名 {labels}／站碼 {codes}／引線 {leaders}／面板 {panels}。滑鼠移到站名上可看它的站碼與引線。",
+    "boot.sanitized": " 已移除可能執行程式或連外的 SVG 內容（{n} 項）。",
     "boot.checking": "地圖已開啟；碰撞檢查正在背景進行，完成後即可匯出。",
     "boot.exportWhenDone": "背景碰撞檢查完成後即可使用",
 
@@ -1029,7 +1047,7 @@ const I18N = {
     "ext.blocks": "區塊",
     "ext.size": "大小",
     "ext.hit": "壓到",
-    "ext.ok": "ok",
+    "ext.ok": "正常",
     "ext.leadersAdjusted": "引線已調整 {n} 條",
     "ext.totalHits": "區塊壓到 {n} 處",
     "ldr.info": "引線：站名端 ({x},{y})　拖它調整長度與方向",
@@ -1038,7 +1056,7 @@ const I18N = {
     "ext2.hint": "開始八方向描線",
     "ext2.colorNote": "線色與線名由你自己的資料來源決定",
     "ext2.schem": "示意框",
-    "ext2.anchorX": "anchor x",
+    "ext2.anchorX": "錨點 x",
     "ext2.linesDrawn": "已描新線 {n} 條",
     "ext2.tracing": "描線中：{n} 點",
     "trace.start": "<b>描線模式</b>　點一下放折點（自動吸八方向）　<b>Backspace</b> 退一點　<b>Enter</b> 完成　<b>Esc</b> 取消。這裡只描幾何。",
@@ -1108,6 +1126,25 @@ function t(key, params){
   let s = (I18N[LANG] && I18N[LANG][key]);
   if(s === undefined) s = (I18N.en[key] !== undefined ? I18N.en[key] : key);
   if(params) for(const k in params) s = s.split("{"+k+"}").join(String(params[k]));
+  return s;
+}
+
+/* Rich translation templates contain a small, trusted set of tags. Values
+   substituted into those templates may come from a loaded SVG or a search
+   box, so escape parameters before inserting the result with innerHTML. */
+function escapeHTML(value){
+  return String(value).replace(/[&<>"']/g, ch=>({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+  })[ch]);
+}
+function tHTML(key, params){
+  const safe={};
+  if(params) for(const k in params) safe[k]=escapeHTML(params[k]);
+  return t(key, safe);
+}
+function tEnglish(key, params){
+  let s=(I18N.en[key]!==undefined ? I18N.en[key] : key);
+  if(params) for(const k in params) s=s.split("{"+k+"}").join(String(params[k]));
   return s;
 }
 
@@ -1225,6 +1262,7 @@ function parseRotate(el){
 function buildModel(){
   /* --- stations: data-x/data-y are authoritative, not the rendered circle --- */
   for(const el of root.querySelectorAll(SEL.station)){
+    el.classList.add("tlt-station");
     let r = 0;
     for(const c of el.querySelectorAll("circle")) r = Math.max(r, parseFloat(c.getAttribute("r"))||0);
     if(!(r>0)) r = 10.2;                       /* dots drawn as <path> get the house default */
@@ -1238,6 +1276,7 @@ function buildModel(){
          This mirrors how a downstream applier finds the element again, so
          what you see here is what it will move. --- */
   for(const el of root.querySelectorAll(SEL.label)){
+    el.classList.add("tlt-label");
     const t = el.textContent;
     const x = num(el,"x",0), y = num(el,"y",0);
     const cands = byName.get(t) || [];
@@ -1256,6 +1295,7 @@ function buildModel(){
 
   /* --- station codes --- */
   for(const g of root.querySelectorAll(SEL.codeGroup)){
+    g.classList.add("tlt-code-group");
     const name = g.getAttribute("data-name")||"", dcode = g.getAttribute("data-code")||"";
     const sx = num(g,"data-station-x",NaN), sy = num(g,"data-station-y",NaN);
     for(const el of g.querySelectorAll("text")){
@@ -1418,7 +1458,7 @@ function setAngle(L, ang){
 }
 function stepAngle(L, dir, absolute){
   if(!L.hasRot){
-    setInfo(t("angle.noRotate", {text:L.text}), true);
+    setInfo(tHTML("angle.noRotate", {text:L.text}), true);
     return null;
   }
   if(absolute !== null && absolute !== undefined){ return setAngle(L, absolute); }
@@ -1429,13 +1469,13 @@ function stepAngle(L, dir, absolute){
        tilt magnitude identical rather than rotating to something arbitrary.
        \ returns to the original angle at any time. */
     const snapped = snapIntoLadder(L.rot);
-    setInfo(t("angle.caseAngle", {text:L.text, from:fmt(L.rot),
+    setInfo(tHTML("angle.caseAngle", {text:L.text, from:fmt(L.rot),
                                   to:fmt(snapped), orig:fmt(L.rot0)}));
     return setAngle(L, snapped);
   }
   const j = i + dir;
   if(j < 0 || j >= SNAP_ANGLES.length){
-    setInfo(t("angle.ladderEnd", {text:L.text, a:fmt(L.rot)}), true);
+    setInfo(tHTML("angle.ladderEnd", {text:L.text, a:fmt(L.rot)}), true);
     return null;
   }
   return setAngle(L, SNAP_ANGLES[j]);
@@ -1465,15 +1505,17 @@ function applyView(){
 function syncCTM(){ mapCTM = mapEl.getScreenCTM(); mapInv = mapCTM.inverse(); }
 function fitAll(){
   const r = stage.getBoundingClientRect();
-  /* Fit into the space the side dock leaves, not the whole stage — otherwise
-     "Fit" hides a fifth of the diagram underneath the panel. On narrow
-     viewports the dock moves to the bottom, so only inset when it is
-     genuinely docked to the right. */
+  /* Fit into the rectangle left by the dock. It sits on the right at desktop
+     widths and moves to the bottom below 980px; both layouts must keep the
+     complete drawing out from underneath it. */
   const d = $("#rightDock").getBoundingClientRect();
-  const inset = (d.width > 0 && d.left > r.width * 0.5) ? (r.width - d.left) + 16 : 0;
-  const availW = Math.max(240, r.width - inset);
-  zoom = Math.min(availW/baseW, r.height/(baseW*VB.h/VB.w)) * 0.98;
-  panX = (availW - baseW*zoom)/2; panY = (r.height - baseW*zoom*VB.h/VB.w)/2;
+  const onRight = d.width>0 && d.left >= r.left+r.width*0.5;
+  const onBottom = d.height>0 && d.top >= r.top+r.height*0.5;
+  const availW = Math.max(240, onRight ? d.left-r.left-16 : r.width);
+  const availH = Math.max(160, onBottom ? d.top-r.top-16 : r.height);
+  zoom = Math.min(availW/baseW, availH/(baseW*VB.h/VB.w)) * 0.98;
+  const drawW=baseW*zoom, drawH=drawW*VB.h/VB.w;
+  panX = (availW-drawW)/2; panY = (availH-drawH)/2;
   applyView(); scheduleCount();
 }
 stage.addEventListener("wheel", e=>{
@@ -1519,7 +1561,7 @@ host.addEventListener("mousedown", e=>{
     obj = M.codes.find(C=>C.el===tg); kind="code";
   }
   if(!obj) return;
-  if(kind==="name" && !obj.st){ setInfo(t("sel.noStation", {text:obj.text}), true); return; }
+  if(kind==="name" && !obj.st){ setInfo(tHTML("sel.noStation", {text:obj.text}), true); return; }
   e.preventDefault(); e.stopPropagation();
   pushUndo();
   select(kind==="name"? obj : (obj.g && M.labels.find(L=>L.code===obj)) || null, obj, kind);
@@ -1707,15 +1749,15 @@ RELABEL.push(()=>{ if(mapCTM) recount(); });
 function setInfo(html, err){ $("#info").innerHTML = err? '<span class="err">'+html+'</span>' : html; }
 function describe(L, C){
   const o = L || (sel && sel._kind==="name" ? sel : null);
-  if(!o){ if(C) setInfo(t("desc.code", {text:C.text, owner:C.name,
+  if(!o){ if(C) setInfo(tHTML("desc.code", {text:C.text, owner:C.name,
                                         slot:codeSlot(C), was:C.slot0})); return; }
-  if(!o.st){ setInfo(t("desc.orphan", {text:o.text}), true); return; }
+  if(!o.st){ setInfo(tHTML("desc.orphan", {text:o.text}), true); return; }
   const dx = o.x-o.st.x, dy = o.y-o.st.y;
-  setInfo(t("desc.main", {text:o.text, code:o.st.code, dx:fmt(dx), dy:fmt(dy),
+  setInfo(tHTML("desc.main", {text:o.text, code:o.st.code, dx:fmt(dx), dy:fmt(dy),
                           anchor:o.anchor,
                           angle:(o.hasRot? fmt(o.rot)+"°" : t("val.none")),
                           leader:(o.ldr? t("val.yes") : t("val.no"))})
-    + (o.code? t("desc.codePart", {text:o.code.text, slot:codeSlot(o.code)}) : "")
+    + (o.code? tHTML("desc.codePart", {text:o.code.text, slot:codeSlot(o.code)}) : "")
     + (o.veto? t("desc.covered") : ""));
 }
 function updateMovedCount(){
@@ -1727,7 +1769,11 @@ RELABEL.push(()=>{ if(M.labels.length) updateMovedCount(); });
 
 /* =========================== Export =================================== */
 function exportRows(){
-  const nameRows = [], codeRows = [], angleRows = [], warn = [];
+  const nameRows = [], codeRows = [], angleRows = [], warn = [], warnUI = [];
+  const addWarn=(key,params)=>{
+    warn.push(tEnglish(key,params).replace(/[\r\n]+/g," "));
+    warnUI.push(tHTML(key,params));
+  };
   /* A downstream applier finds a label by "same text, nearest to this
      station". When two stations share a name, dragging one far enough can
      make the *other* label the nearer match — and the applier would then
@@ -1743,11 +1789,11 @@ function exportRows(){
       let best = null, bd = Infinity;
       for(const p of peers){ const d = Math.hypot(p.x-L.st.x, p.y-L.st.y); if(d < bd){ bd = d; best = p; } }
       if(best !== L)
-        warn.push(t("warn.dupName", {text:L.text, code:L.st.code}));
+        addWarn("warn.dupName", {text:L.text, code:L.st.code});
     }
     if(Math.hypot(dx, dy) > CONFIG.limits.maxOffset)
-      warn.push(t("warn.tooFar", {text:L.text, code:L.st.code,
-                                  d:fmt(Math.hypot(dx,dy)), max:CONFIG.limits.maxOffset}));
+      addWarn("warn.tooFar", {text:L.text, code:L.st.code,
+                               d:fmt(Math.hypot(dx,dy)), max:CONFIG.limits.maxOffset});
     /* The angle column exists to *preserve* the original angle, so it is
        always filled in — None when there is no transform. Writing 0 instead
        makes an applier that compares this column with the file abort. */
@@ -1760,11 +1806,11 @@ function exportRows(){
          cannot be targeted unambiguously. Flag it and keep the row visible
          rather than dropping it — the user should know why it is excluded. */
       const dup = peers.length > 1;
-      if(dup) warn.push(t("warn.dupAngle", {text:L.text, code:L.st.code}));
+      if(dup) addWarn("warn.dupAngle", {text:L.text, code:L.st.code});
       angleRows.push({text:L.text, code:L.st.code, from:L.rot0, to:L.rot, dup:dup,
                       why:"label tuner "+stamp()});
     }
-    if(L.veto) warn.push(t("warn.veto", {text:L.text}));
+    if(L.veto) addWarn("warn.veto", {text:L.text});
   }
   for(const C of M.codes){
     if(!C.grabbed) continue;
@@ -1772,15 +1818,16 @@ function exportRows(){
     if(s===C.slot0) continue;
     codeRows.push({name:C.name, gcode:C.dcode, text:C.text, slot:s, was:C.slot0,
                    why:"label tuner "+stamp()});
-    if(C.veto) warn.push(t("warn.codeVeto", {text:C.text}));
+    if(C.veto) addWarn("warn.codeVeto", {text:C.text});
   }
-  return {nameRows, codeRows, angleRows, warn};
+  return {nameRows, codeRows, angleRows, warn, warnUI};
 }
 function stamp(){
   const d = new Date();
   return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
 }
-function py(s){ return '"'+String(s).replace(/\\/g,"\\\\").replace(/"/g,'\\"')+'"'; }
+function py(s){ return '"'+String(s).replace(/\\/g,"\\\\").replace(/"/g,'\\"')
+  .replace(/\r/g,"\\r").replace(/\n/g,"\\n").replace(/\t/g,"\\t")+'"'; }
 /* The move list is a machine artifact for your own generator, so it stays in
    English regardless of the interface language. Format: Python-style tuple
    rows, one section per kind of edit. See README.md § Move list format. */
@@ -1790,7 +1837,7 @@ function exportText(){
   out.push("# Move list — exported by Transit Label Tuner");
   out.push("# source diagram : " + SVG_PATH.split("/").pop());
   out.push("# format version : " + PANEL_FORMAT_VERSION);
-  out.push("# source SHA-256 : " + SOURCE_FINGERPRINT);
+  out.push("# source fingerprint : " + SOURCE_FINGERPRINT);
   out.push("# If a label already has a NAME_MOVES row, EDIT that row — do not add a second one.");
   out.push("#   Two NAME_MOVES rows for one label: a strict applier aborts.");
   out.push("#   Two CODE_NUDGES rows for one code: the later row silently wins.");
@@ -1939,15 +1986,84 @@ function waitSize(el){
   });
 }
 
+async function fingerprintText(text){
+  if(globalThis.crypto && crypto.subtle){
+    const bytes=new TextEncoder().encode(text);
+    const digest=await crypto.subtle.digest("SHA-256",bytes);
+    return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,"0")).join("");
+  }
+  /* Web Crypto requires a secure context outside localhost. Keep drafts
+     separated in older/insecure browsers with a deterministic fallback. */
+  let a=2166136261, b=2246822519;
+  for(let i=0;i<text.length;i++){
+    const c=text.charCodeAt(i); a=Math.imul(a^c,16777619); b=Math.imul(b^c,3266489917);
+  }
+  return "fnv1a-"+(a>>>0).toString(16).padStart(8,"0")
+    +(b>>>0).toString(16).padStart(8,"0")+"-"+text.length;
+}
+
+/* SVG is data, not application code. Parse it in the SVG namespace and remove
+   features that can execute script or fetch a third-party resource before the
+   document is adopted into this page. Fragment references such as url(#mask)
+   and href="#symbol" remain available because maps rely on them. This is a
+   defence-in-depth boundary; the README still tells users to open only maps
+   they trust. */
+const SVG_NS="http://www.w3.org/2000/svg";
+let SANITIZED_ITEMS=0;
+function safeSvgCss(css){
+  return String(css)
+    .replace(/@import\s+[^;]+;?/gi, "")
+    .replace(/url\(\s*(['"]?)(.*?)\1\s*\)/gi, (all,q,target)=>
+      String(target).trim().startsWith("#") ? all : "none");
+}
+function parseSafeSvg(text, path){
+  const doc=new DOMParser().parseFromString(text,"image/svg+xml");
+  const svg=doc.documentElement;
+  if(doc.doctype || !svg || svg.localName!=="svg" || svg.namespaceURI!==SVG_NS ||
+     doc.querySelector("parsererror"))
+    throw new Error(t("boot.err.unsafeSvg",{path}));
+
+  const blocked=new Set(["script","foreignobject","iframe","object","embed",
+    "audio","video","animate","animatemotion","animatetransform","set","discard"]);
+  SANITIZED_ITEMS=0;
+  for(const el of [svg,...svg.querySelectorAll("*")]){
+    if(el!==svg && (el.namespaceURI!==SVG_NS || blocked.has(el.localName.toLowerCase()))){
+      el.remove(); SANITIZED_ITEMS++; continue;
+    }
+    for(const attr of [...el.attributes]){
+      const name=attr.name.toLowerCase(), value=attr.value.trim();
+      if(name.startsWith("on") || /^javascript:/i.test(value) ||
+         ((name==="href" || name==="xlink:href" || name==="src") &&
+          value && !value.startsWith("#"))){
+        el.removeAttributeNode(attr); SANITIZED_ITEMS++; continue;
+      }
+      if(name==="style"){
+        const clean=safeSvgCss(attr.value);
+        if(clean!==attr.value){
+          clean.trim() ? el.setAttribute(attr.name,clean) : el.removeAttributeNode(attr);
+          SANITIZED_ITEMS++;
+        }
+      }
+    }
+    if(el.localName.toLowerCase()==="style"){
+      const clean=safeSvgCss(el.textContent);
+      if(clean!==el.textContent){ el.textContent=clean; SANITIZED_ITEMS++; }
+    }
+  }
+  return document.importNode(svg,true);
+}
+
 async function boot(){
   try{
     const bootStep = key=>{ const el=$("#boot small"); if(el) el.textContent=t(key); };
     bootStep("boot.step.inline");
-    const txt = await (await fetch(SVG_PATH)).text();
-    if(txt.indexOf("<svg")<0) throw new Error(t("boot.err.load", {path:SVG_PATH}));
-    host.innerHTML = txt;
-    root = host.querySelector("svg");
-    if(!root) throw new Error(t("boot.err.notSvg", {path:SVG_PATH}));
+    const response=await fetch(SVG_PATH);
+    if(!response.ok) throw new Error(t("boot.err.load", {path:SVG_PATH}));
+    const txt=await response.text();
+    if(!SOURCE_FINGERPRINT || SOURCE_FINGERPRINT==="__SOURCE_SHA256__")
+      SOURCE_FINGERPRINT=await fingerprintText(txt);
+    root=parseSafeSvg(txt,SVG_PATH);
+    host.replaceChildren(root);
     root.setAttribute("id","tlt-root");   /* stable id for CSS and test hooks */
     const vb = (root.getAttribute("viewBox")||"0 0 1684 1188").trim().split(/[\s,]+/).map(Number);
     VB = {w:vb[2], h:vb[3]}; baseW = vb[2];
@@ -1973,7 +2089,8 @@ async function boot(){
     updateMovedCount();
     const loadedText = ()=> t("boot.loaded", {
       stations:M.stations.length, labels:M.labels.length, codes:M.codes.length,
-      leaders:M.labels.filter(L=>L.ldr).length, panels:M.panels.length});
+      leaders:M.labels.filter(L=>L.ldr).length, panels:M.panels.length})+
+      (SANITIZED_ITEMS ? t("boot.sanitized",{n:SANITIZED_ITEMS}) : "");
     const automated = qs.has("test") || qs.has("uitest");
     if(automated){
       await vetoAllAsync();
@@ -1993,14 +2110,16 @@ async function boot(){
     window.__ready = true;
     runTest();
   }catch(err){
-    $("#boot").innerHTML = '<span class="err">'+err.message+'</span>';
+    const bootEl=$("#boot"); bootEl.textContent="";
+    const msg=document.createElement("span");msg.className="err";msg.textContent=err.message;
+    bootEl.appendChild(msg);
     document.title = "RESULT"+JSON.stringify({error:err.message});
     window.__ready = "error";
   }
 }
 
 /* ?test=<json>  e.g. {"ops":[{"t":"name","key":"Riverside|R05","dx":0,"dy":18},
-                             {"t":"code","key":"Arsenal|B05|B05","dx":-8,"dy":1}]}
+                             {"t":"code","key":"Central Exchange|B05|B05","dx":-8,"dy":1}]}
    The result is written into document.title so a headless --dump-dom can
    read it back without needing a screenshot. */
 function runTest(){
@@ -2225,7 +2344,7 @@ stage.addEventListener("mousedown", e=>{
   if(l){ if(sel){sel.el.classList.remove("dt-sel");sel=null;} EXT2.sel=null;EXT.sel=l; extPushUndo();
          EXT.drag={kind:"ldr", l, mx:e.clientX, my:e.clientY, dx0:l.dx, dy0:l.dy, k:zoom*extMapScale()};
          e.stopPropagation(); e.preventDefault();
-         setInfo(t("ldr.info",{x:efmt(l.x20+l.dx), y:efmt(l.y20+l.dy)})); return; }
+         setInfo(tHTML("ldr.info",{x:efmt(l.x20+l.dx), y:efmt(l.y20+l.dy)})); return; }
 }, true);
 function extMapScale(){
   const vb=(mapEl.getAttribute("viewBox")||"0 0 1684 1188").split(/\s+/).map(Number);
@@ -2272,14 +2391,14 @@ function extExportText(){
   L.push("# ---- LAYOUT_NUDGE (block offsets; blocks inside the inner map are in map units,");
   L.push("#      blocks on the outer canvas are in canvas units) ----");
   if(bad.length) L.push("# !! still overlapping: "
-    +bad.map(b=>blockLabel(b)+"("+b.hits+")").join(", "));
+    +bad.map(b=>tEnglish(b.labelKey)+"("+b.hits+")").join(", "));
   L.push("LAYOUT_NUDGE = {");
-  for(const b of EXT.blocks) L.push('    "'+b.id+'": ('+efmt(b.dx)+', '+efmt(b.dy)+'),   # '+blockLabel(b)
+  for(const b of EXT.blocks) L.push('    '+py(b.id)+': ('+efmt(b.dx)+', '+efmt(b.dy)+'),   # '+tEnglish(b.labelKey)
     +(b.hits?'  <- overlaps '+b.hits:''));
   L.push("}");
   L.push("# ---- LAYOUT_SCALE (block scale factor, anchored at the block centre) ----");
   L.push("LAYOUT_SCALE = {");
-  for(const b of EXT.blocks) if(Math.abs(b.s-1)>1e-6) L.push('    "'+b.id+'": '+efmt(b.s*1000)/1000+',   # '+blockLabel(b));
+  for(const b of EXT.blocks) if(Math.abs(b.s-1)>1e-6) L.push('    '+py(b.id)+': '+efmt(b.s*1000)/1000+',   # '+tEnglish(b.labelKey));
   L.push("}");
   const ld=EXT.leaders.filter(l=>l.dx||l.dy);
   L.push("# ---- LEADER_NUDGE (offset of the leader's *label* end, map units) ----");
@@ -2303,7 +2422,7 @@ $("#btnDown").onclick = ()=>{
   const blob=new Blob([$("#exportText").value||extExportText()],{type:"text/plain;charset=utf-8"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
   document.body.appendChild(a); a.click(); a.remove();
-  setInfo(t("dl.done",{name}));
+  setInfo(tHTML("dl.done",{name}));
 };
 
 /* Scripting hooks (headless verification; same path as the mouse) */
@@ -2363,6 +2482,12 @@ function extRunTest(){
        those belong to whatever data source owns your network.
    ======================================================================= */
 const EXT2 = {schem:[], trace:null, lines:[], mode:null};
+function schemLabel(sc){
+  return sc.key || (t("type.schem")+" "+Math.round(sc.x0)+","+Math.round(sc.y0));
+}
+function schemMachineLabel(sc){
+  return sc.key || (tEnglish("type.schem")+" "+Math.round(sc.x0)+","+Math.round(sc.y0));
+}
 
 /* ---------------- A. proposal boxes ---------------- */
 function ext2FindSchem(){
@@ -2401,7 +2526,8 @@ function ext2FindSchem(){
     const inside=(x,y)=> x>=b.x-2 && x<=b.x+b.w+2 && y>=b.y-2 && y<=b.y+b.h+2;
     const take=[];
     for(const el of [...mapEl.querySelectorAll("rect,text,line,circle,path")]){
-      if(el.closest("g.stn-g") || el.classList.contains("lbl") || el.closest("g.boss-code-label")) continue;
+      if(el.closest(".tlt-station") || el.classList.contains("tlt-label") ||
+         el.closest(".tlt-code-group")) continue;
       if(el.closest("g.ext-schem") && el.closest("g.ext-schem")!==wrap) continue;
       const g=n=>parseFloat(el.getAttribute(n));
       let x,y;
@@ -2413,7 +2539,7 @@ function ext2FindSchem(){
     }
     for(const el of take) wrap.appendChild(el);
     EXT2.schem.push({wrap, key:b.key, x0:b.x, y0:b.y, w:b.w, h:b.h, dx:0, dy:0,
-                     label:(b.key||(t("type.schem")+" "+Math.round(b.x)+","+Math.round(b.y))), n:take.length});
+                     n:take.length});
   }
 }
 function ext2PaintSchem(sc){ sc.wrap.setAttribute("transform","translate("+efmt(sc.dx)+","+efmt(sc.dy)+")"); }
@@ -2484,7 +2610,7 @@ function ext2TraceFinish(keep){
   const tr=EXT2.trace; if(!tr) return;
   if(keep && tr.pts.length>=2){
     EXT2.lines.push({pts:tr.pts.slice(), d:ext2PathD(tr.pts), g:tr.g});
-    setInfo(t("trace.done",{n:tr.pts.length}));
+    setInfo(tHTML("trace.done",{n:tr.pts.length}));
   }else{
     tr.g.remove();
     setInfo(t(keep ? "trace.tooFew" : "trace.cancelled"));
@@ -2546,7 +2672,7 @@ function ext2Render(){
     sc.hits=ext2SchemHits(sc);
     sc.wrap.style.outline = sc.hits? "3px dashed #b3261e" : "";
     const ax=efmt(sc.x0+sc.dx), ay=efmt(sc.y0+sc.dy);
-    return '<tr class="'+(EXT2.sel===sc?"sel":"")+'"><td>'+sc.label+'</td>'
+    return '<tr class="'+(EXT2.sel===sc?"sel":"")+'"><td>'+escapeHTML(schemLabel(sc))+'</td>'
       +'<td class="n">'+ax+'</td><td class="n">'+ay+'</td>'
       +'<td class="'+(sc.hits?"err":"")+'">'+(sc.hits?t("ext.hit"):t("ext.ok"))+'</td></tr>';
   }).join("");
@@ -2567,13 +2693,13 @@ function ext2ExportText(){
      moved anyway, say so explicitly rather than dropping the edit silently. */
   for(const sc of EXT2.schem){
     if(!sc.key && (sc.dx || sc.dy))
-      L.push("#    !! "+sc.label+" was moved by ("+efmt(sc.dx)+","+efmt(sc.dy)+") but has no"
+      L.push("#    !! "+schemMachineLabel(sc)+" was moved by ("+efmt(sc.dx)+","+efmt(sc.dy)+") but has no"
              +" key in CONFIG.schematic.keys — no applier can place it. Add a key or revert it.");
   }
   for(const sc of EXT2.schem){
     if(!sc.key) continue;
     if(!sc.dx && !sc.dy) continue;
-    L.push('    "'+sc.key+'": ('+efmt(sc.x0+sc.dx)+', '+efmt(sc.y0+sc.dy)+'),'
+    L.push('    '+py(sc.key)+': ('+efmt(sc.x0+sc.dx)+', '+efmt(sc.y0+sc.dy)+'),'
            +(sc.hits?'   # <- overlaps '+sc.hits:''));
   }
   L.push("}");
@@ -2597,13 +2723,19 @@ $("#btnDown").onclick = ()=>{
   const blob=new Blob([$("#exportText").value||ext2ExportText()],{type:"text/plain;charset=utf-8"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
   document.body.appendChild(a); a.click(); a.remove();
-  setInfo(t("dl.done",{name}));
+  setInfo(tHTML("dl.done",{name}));
 };
 
 /* Scripting hooks (headless verification) */
-window.moveSchem = (key,dx,dy)=>{ const sc=EXT2.schem.find(x=>x.key===key); if(!sc) throw new Error("No proposal box with key "+key);
+function moveSchemObject(sc,dx,dy){
   extPushUndo(); sc.dx+=dx; sc.dy+=dy; ext2PaintSchem(sc); ext2Render();
-  return {key, anchor:[efmt(sc.x0+sc.dx), efmt(sc.y0+sc.dy)], hits:sc.hits}; };
+  return {key:sc.key,index:EXT2.schem.indexOf(sc),
+    anchor:[efmt(sc.x0+sc.dx), efmt(sc.y0+sc.dy)], hits:sc.hits};
+}
+window.moveSchem = (key,dx,dy)=>{ const sc=EXT2.schem.find(x=>x.key===key); if(!sc) throw new Error("No proposal box with key "+key);
+  return moveSchemObject(sc,dx,dy); };
+window.moveSchemAt = (index,dx,dy)=>{ const sc=EXT2.schem[index]; if(!sc) throw new Error("No proposal box at index "+index);
+  return moveSchemObject(sc,dx,dy); };
 window.traceLine = (pts)=>{ if(window.__historyPush) window.__historyPush(t("hist.trace")); ext2TraceStart();
   for(const [x,y] of pts){
     const tr=EXT2.trace;
@@ -2613,7 +2745,7 @@ window.traceLine = (pts)=>{ if(window.__historyPush) window.__historyPush(t("his
   ext2TraceRepaint(); ext2TraceFinish(true);
   const ln=EXT2.lines[EXT2.lines.length-1];
   return {pts:ln.pts, d:ln.d}; };
-window.ext2State = ()=>({schem:EXT2.schem.map(sc=>({key:sc.key,label:sc.label,members:sc.n,
+window.ext2State = ()=>({schem:EXT2.schem.map(sc=>({key:sc.key,label:schemLabel(sc),members:sc.n,
   anchor:[efmt(sc.x0+sc.dx),efmt(sc.y0+sc.dy)],hits:sc.hits})), lines:EXT2.lines, text:ext2ExportText()});
 
 (function w2(){ if(window.__ext){ ext2FindSchem(); ext2Render(); ext2RunTest(); } else setTimeout(w2,150); })();
@@ -2624,6 +2756,7 @@ function ext2RunTest(){
     for(const op of (JSON.parse(raw).ops||[])){
       try{
         if(op.k==="schem") res.ops.push(window.moveSchem(op.key, op.dx||0, op.dy||0));
+        else if(op.k==="schemIndex") res.ops.push(window.moveSchemAt(op.i, op.dx||0, op.dy||0));
         else if(op.k==="trace") res.ops.push(window.traceLine(op.pts));
         else res.errors.push("unknown op: "+op.k);
       }catch(e){ res.errors.push(String(e.message||e)); }
@@ -2648,7 +2781,7 @@ function ext2RunTest(){
    ======================================================================= */
 (function(){
 const UIH={undo:[],redo:[],applying:false,dirty:false,baseline:null,initialCounts:null,saveTimer:null};
-const DRAFT_KEY="rail-layout-draft:"+SOURCE_FINGERPRINT+":"+PANEL_FORMAT_VERSION;
+const draftKey=()=>"rail-layout-draft:"+SOURCE_FINGERPRINT+":"+PANEL_FORMAT_VERSION;
 window.__layerLocks={labels:false,codes:false,leaders:false,blocks:false,newlines:false};
 
 function captureState(){
@@ -2658,7 +2791,7 @@ function captureState(){
     codes:M.codes.map(C=>({x:C.x,y:C.y,anchor:C.anchor,grabbed:!!C.grabbed})),
     blocks:(window.__ext?EXT.blocks:[]).map(b=>({id:b.id,dx:b.dx,dy:b.dy,s:b.s})),
     leaders:(window.__ext?EXT.leaders:[]).map(l=>({dx:l.dx,dy:l.dy})),
-    schem:(typeof EXT2!=="undefined"?EXT2.schem:[]).map(sc=>({key:sc.key,label:sc.label,dx:sc.dx,dy:sc.dy})),
+    schem:(typeof EXT2!=="undefined"?EXT2.schem:[]).map(sc=>({key:sc.key,x0:sc.x0,y0:sc.y0,dx:sc.dx,dy:sc.dy})),
     lines:(typeof EXT2!=="undefined"?EXT2.lines:[]).map(ln=>({pts:ln.pts.map(p=>({x:p.x,y:p.y}))}))
   };
 }
@@ -2676,7 +2809,11 @@ function restoreState(s){
     for(const r of (s.blocks||[])){const b=EXT.blocks.find(x=>x.id===r.id);if(!b)continue;
       b.dx=r.dx;b.dy=r.dy;b.s=r.s;extPaint(b);}
     (s.leaders||[]).forEach((r,i)=>{const l=EXT.leaders[i];if(!l)return;l.dx=r.dx;l.dy=r.dy;extPaintLdr(l);});
-    for(const r of (s.schem||[])){const sc=EXT2.schem.find(x=>(r.key&&x.key===r.key)||(!r.key&&x.label===r.label));
+    for(const r of (s.schem||[])){const sc=EXT2.schem.find(x=>(r.key&&x.key===r.key)||
+      (!r.key&&((Number.isFinite(r.x0)&&Number.isFinite(r.y0)&&
+                 Math.abs(x.x0-r.x0)<.01&&Math.abs(x.y0-r.y0)<.01)||
+        [schemLabel(x),schemMachineLabel(x),I18N.zh["type.schem"]+" "+Math.round(x.x0)+","+Math.round(x.y0)]
+          .includes(r.label))));
       if(!sc)continue;sc.dx=r.dx;sc.dy=r.dy;ext2PaintSchem(sc);}
     for(const ln of EXT2.lines){if(ln.g)ln.g.remove();}
     mapEl.querySelectorAll("g.ext-trace").forEach(g=>g.remove());
@@ -2702,12 +2839,12 @@ function historyPush(label){
 function historyUndo(){
   const x=UIH.undo.pop();if(!x)return;
   UIH.redo.push({label:x.label,state:captureState()});restoreState(x.state);
-  updateHistoryButtons();scheduleDraftSave();setInfo(t("hist.undone",{label:x.label}));
+  updateHistoryButtons();scheduleDraftSave();setInfo(tHTML("hist.undone",{label:x.label}));
 }
 function historyRedo(){
   const x=UIH.redo.pop();if(!x)return;
   UIH.undo.push({label:x.label,state:captureState()});restoreState(x.state);
-  updateHistoryButtons();scheduleDraftSave();setInfo(t("hist.redone",{label:x.label}));
+  updateHistoryButtons();scheduleDraftSave();setInfo(tHTML("hist.redone",{label:x.label}));
 }
 window.__historyPush=historyPush;
 
@@ -2748,7 +2885,7 @@ function updateInspector(){
     ].join("\n");
   }else if(EXT2.sel){
     const sc=EXT2.sel;
-    body=[row("insp.type",t("type.schem")), row("insp.name",sc.label),
+    body=[row("insp.type",t("type.schem")), row("insp.name",schemLabel(sc)),
       row("insp.offset","dx "+efmt(sc.dx)+" / dy "+efmt(sc.dy)),
       row("insp.status",sc.hits?t("st.hits",{n:sc.hits}):t("st.clear"))].join("\n");
   }
@@ -2775,16 +2912,16 @@ function findStation(){
     const exactCodes=M.codes.filter(c=>norm(c.text)===raw);
     const names=[...new Set(exactCodes.map(c=>c.name))];
     if(names.length>1){
-      const msg=t("search.ambiguous",{code:input,n:names.length,names:names.join(", ")});
+      const msg=tHTML("search.ambiguous",{code:input,n:names.length,names:names.join(", ")});
       $("#inspectorBody").textContent=t("search.results")+"\n"+names.map(n=>"• "+n+" | "+input).join("\n");
       setInfo(msg,true);return;
     }
     if(names.length===1)L=M.labels.find(x=>x.st&&(x.st.name===names[0]||x.text===names[0]));
   }
   if(!L)L=M.labels.find(x=>x.st&&(norm(x.text).includes(raw)||norm(x.st.name).includes(raw)||norm(x.st.code).includes(raw)));
-  if(!L){setInfo(t("search.notFound",{q:$("#stationSearch").value}),true);return;}
+  if(!L){setInfo(tHTML("search.notFound",{q:$("#stationSearch").value}),true);return;}
   focusOn(L.text+"|"+L.st.code,Math.max(5,zoom));select(L,L,"name");hot(L,L.code);
-  $("#stationSearch").value=L.text+" | "+L.st.code;setInfo(t("search.went",{name:L.text,code:L.st.code}));
+  $("#stationSearch").value=L.text+" | "+L.st.code;setInfo(tHTML("search.went",{name:L.text,code:L.st.code}));
 }
 function buildSearch(){
   const seen=new Set(),opts=[];
@@ -2804,12 +2941,12 @@ for(const cb of document.querySelectorAll("[data-layer]"))cb.onchange=()=>{
   window.__layerLocks[cb.dataset.layer]=!cb.checked;applyLayerLocks();
 };
 stage.addEventListener("mousedown",e=>{
-  if(window.__layerLocks.labels&&e.target.matches("text.lbl")){e.stopPropagation();e.preventDefault();}
-  if(window.__layerLocks.codes&&e.target.closest("g.boss-code-label")){e.stopPropagation();e.preventDefault();}
+  if(window.__layerLocks.labels&&e.target.matches(".tlt-label")){e.stopPropagation();e.preventDefault();}
+  if(window.__layerLocks.codes&&e.target.closest(".tlt-code-group")){e.stopPropagation();e.preventDefault();}
 },true);
 
 function draftAvailable(){
-  try{return !!localStorage.getItem(DRAFT_KEY);}catch(e){return false;}
+  try{return !!localStorage.getItem(draftKey());}catch(e){return false;}
 }
 function refreshDraftStatus(msg){
   $("#btnRestoreDraft").disabled=!draftAvailable();
@@ -2818,14 +2955,14 @@ function refreshDraftStatus(msg){
 }
 function saveDraft(){
   if(!UIH.dirty)return;
-  try{localStorage.setItem(DRAFT_KEY,JSON.stringify(captureState()));UIH.dirty=false;
+  try{localStorage.setItem(draftKey(),JSON.stringify(captureState()));UIH.dirty=false;
       refreshDraftStatus(t("draft.saved",{time:new Date().toLocaleTimeString(
         LANG==="zh"?"zh-Hant":"en",{hour:"2-digit",minute:"2-digit"})}));}
   catch(e){refreshDraftStatus(t("draft.failed",{msg:e.message}));}
 }
 function scheduleDraftSave(){if(!UIH.dirty)return;clearTimeout(UIH.saveTimer);UIH.saveTimer=setTimeout(saveDraft,350);}
-$("#btnRestoreDraft").onclick=()=>{try{const s=JSON.parse(localStorage.getItem(DRAFT_KEY)||"null");historyPush(t("hist.beforeDraft"));restoreState(s);UIH.dirty=true;scheduleDraftSave();setInfo(t("draft.restored"));}catch(e){setInfo(t("draft.restoreFail",{msg:e.message}),true);}};
-$("#btnClearDraft").onclick=()=>{try{localStorage.removeItem(DRAFT_KEY);}catch(e){}UIH.dirty=false;refreshDraftStatus(t("draft.cleared"));};
+$("#btnRestoreDraft").onclick=()=>{try{const s=JSON.parse(localStorage.getItem(draftKey())||"null");historyPush(t("hist.beforeDraft"));restoreState(s);UIH.dirty=true;scheduleDraftSave();setInfo(tHTML("draft.restored"));}catch(e){setInfo(tHTML("draft.restoreFail",{msg:e.message}),true);}};
+$("#btnClearDraft").onclick=()=>{try{localStorage.removeItem(draftKey());}catch(e){}UIH.dirty=false;refreshDraftStatus(t("draft.cleared"));};
 $("#btnSaveSession").onclick=()=>{
   const blob=new Blob([JSON.stringify(captureState(),null,2)],{type:"application/json"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="layout-session_"+stamp()+".json";
@@ -2833,8 +2970,8 @@ $("#btnSaveSession").onclick=()=>{
 };
 $("#btnLoadSession").onclick=()=>$("#sessionFile").click();
 $("#sessionFile").onchange=async e=>{const f=e.target.files[0];if(!f)return;
-  try{const s=JSON.parse(await f.text());historyPush(t("hist.beforeSession"));restoreState(s);saveDraft();setInfo(t("session.loaded",{name:f.name}));}
-  catch(err){setInfo(t("session.loadFail",{msg:err.message}),true);}finally{e.target.value="";}};
+  try{const s=JSON.parse(await f.text());historyPush(t("hist.beforeSession"));restoreState(s);saveDraft();setInfo(tHTML("session.loaded",{name:f.name}));}
+  catch(err){setInfo(tHTML("session.loadFail",{msg:err.message}),true);}finally{e.target.value="";}};
 window.addEventListener("mouseup",scheduleDraftSave);
 window.addEventListener("keyup",e=>{if(!["Control","Meta","Shift","Alt"].includes(e.key))scheduleDraftSave();});
 window.addEventListener("beforeunload",saveDraft);
@@ -2842,10 +2979,10 @@ window.addEventListener("beforeunload",saveDraft);
 function movedSummary(){
   const R=exportRows(),blocks=EXT.blocks.filter(b=>b.dx||b.dy||Math.abs(b.s-1)>1e-6);
   const leaders=EXT.leaders.filter(l=>l.dx||l.dy),schem=EXT2.schem.filter(sc=>sc.dx||sc.dy);
-  const hard=[...R.warn];
-  for(const b of blocks)if(b.hits)hard.push(t("warn.blockHits",{label:blockLabel(b),n:b.hits}));
-  for(const sc of schem){if(sc.hits)hard.push(t("warn.blockHits",{label:sc.label,n:sc.hits}));
-                         if(!sc.key)hard.push(t("warn.schemNoKey",{label:sc.label}));}
+  const hard=[...R.warnUI];
+  for(const b of blocks)if(b.hits)hard.push(tHTML("warn.blockHits",{label:blockLabel(b),n:b.hits}));
+  for(const sc of schem){if(sc.hits)hard.push(tHTML("warn.blockHits",{label:schemLabel(sc),n:sc.hits}));
+                         if(!sc.key)hard.push(tHTML("warn.schemNoKey",{label:schemLabel(sc)}));}
   if(UIH.initialCounts&&window.__counts&&window.__counts.nr>UIH.initialCounts.nr)
     hard.push(t("warn.moreCrossings",{n:window.__counts.nr-UIH.initialCounts.nr}));
   return {R,blocks,leaders,schem,hard,text:t("pre.summary",{
@@ -2888,19 +3025,35 @@ function runUITest(){
       }catch(e){res.errors.push(String(e.message||e));}
     }
     const L=M.byKey.get("Cathedral|R06"),B=EXT.blocks.find(x=>x.id==="title-block");
-    /* A few theme tokens, read back from the cascade: an empty value is how an
-       unresolved custom property shows up, and the map's own paper is asserted
-       to be theme-independent. */
+    /* Read every token declared by either theme, not a hand-picked sample. */
     const cs=getComputedStyle(document.documentElement), tokens={};
-    for(const k of ["--text","--pane-bg","--btn-bg","--pri-bg","--dock-bg","--accent",
-                    "--input-bg","--info-bg","--boot-bg","--table-fg","--focus-ring"])
-      tokens[k]=cs.getPropertyValue(k);
+    const tokenNames=new Set();
+    const collect=rules=>{for(const rule of rules){
+      if(rule.selectorText&&rule.selectorText.includes(":root")&&rule.style)
+        for(const k of rule.style)if(k.startsWith("--"))tokenNames.add(k);
+      if(rule.cssRules)collect(rule.cssRules);
+    }};
+    for(const sheet of document.styleSheets)collect(sheet.cssRules);
+    for(const k of tokenNames)tokens[k]=cs.getPropertyValue(k);
     const svgEl=host.querySelector("svg");
+    const dockRect=$("#rightDock").getBoundingClientRect(),mapRect=svgEl.getBoundingClientRect();
+    const mapDockOverlap=!(mapRect.right<=dockRect.left||dockRect.right<=mapRect.left||
+                           mapRect.bottom<=dockRect.top||dockRect.bottom<=mapRect.top);
+    const missingI18n=[...document.querySelectorAll("[data-i18n]")]
+      .filter(el=>el.textContent.trim()===el.getAttribute("data-i18n")).map(el=>el.getAttribute("data-i18n"));
     res.state={labelMoved:L?isMoved(L):null,blockDx:B?B.dx:null,undo:UIH.undo.length,redo:UIH.redo.length,
       inspector:$("#inspectorBody").textContent,source:SOURCE_FINGERPRINT,format:PANEL_FORMAT_VERSION,
       dockChildren:[...$("#rightDock").children].map(x=>x.id),downloadDisabled:$("#btnDown").disabled,
       theme:document.documentElement.getAttribute("data-theme"),tokens:tokens,
-      paper:svgEl?getComputedStyle(svgEl).backgroundColor:null};
+      paper:svgEl?getComputedStyle(svgEl).backgroundColor:null,draft:draftAvailable(),
+      movedNames:M.labels.filter(isMoved).length,movedCodes:M.codes.filter(c=>c.grabbed).length,
+      missingI18n,infoHTML:$("#info").innerHTML,probeExists:!!$("#xss-probe"),mapDockOverlap,
+      sanitized:SANITIZED_ITEMS,unsafeProbe:globalThis.__unsafeProbe||0,
+      exportText:ext2ExportText(),mapRect:{left:mapRect.left,top:mapRect.top,right:mapRect.right,bottom:mapRect.bottom},
+      dockRect:{left:dockRect.left,top:dockRect.top,right:dockRect.right,bottom:dockRect.bottom},
+      semanticClasses:{stations:host.querySelectorAll(".tlt-station").length,
+        labels:host.querySelectorAll(".tlt-label").length,codes:host.querySelectorAll(".tlt-code-group").length},
+      codePointer:getComputedStyle(host.querySelector(".tlt-code-group text")).pointerEvents};
   }catch(e){res.errors.push("uitest："+String(e.message||e));}
   const pre=document.createElement("pre");pre.id="uitestresult";pre.textContent=JSON.stringify(res);pre.style.display="none";
   document.body.appendChild(pre);
@@ -2920,10 +3073,21 @@ window.addEventListener("keydown",e=>{
 window.resetAll=()=>{historyPush(t("hist.reset"));restoreState(UIH.baseline);setInfo(t("reset.done"));};
 $("#btnReset").onclick=window.resetAll;
 
+function showSanitizeNotice(){
+  if(SANITIZED_ITEMS)
+    setInfo(tHTML("info.hover")+"<br>"+tHTML("boot.sanitized",{n:SANITIZED_ITEMS}),true);
+}
+RELABEL.push(showSanitizeNotice);
+
 function initMaturity(){
   if(!window.__ready||!window.__ext||typeof EXT2==="undefined"){setTimeout(initMaturity,120);return;}
   for(const id of ["ext2Pane","extPane"]){const el=$("#"+id);if(el)$("#rightDock").appendChild(el);}
+  /* Appending the extension panes can make the bottom dock grow upward at the
+     responsive breakpoint. Refit against its final rectangle, not the
+     smaller boot-time dock. */
+  fitAll();
   applyStaticI18n();   /* these panes live after script 1, so translate them now */
+  showSanitizeNotice();
   buildSearch();recount();UIH.initialCounts=Object.assign({},window.__counts);
   UIH.baseline=captureState();updateHistoryButtons();updateInspector();refreshDraftStatus();
   window.__maturity={captureState,restoreState,historyPush,historyUndo,historyRedo,movedSummary,
