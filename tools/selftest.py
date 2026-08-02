@@ -158,11 +158,19 @@ def _(run):
 
 @check("a synthetic mouse drag lands on the same place as applyMove")
 def _(run):
-    a = run(test={"ops": [{"t": "name", "key": "Eastport|R08", "dx": 0, "dy": 12}]})
     b = run(test={"ops": [{"t": "dragpx", "key": "Eastport|R08", "dx": 0, "dy": 12}]})
+    assert not b["errors"], b["errors"]
+    moved_y = b["ops"][0]["movedY"]
+    # MouseEvent client coordinates are quantized to CSS pixels.  At the
+    # fit-to-window scale used by headless Chrome, a requested 12 map units
+    # can therefore become 11, 12, or 13 after the real screen->map path.
+    # Compare applyMove against that representable movement, while keeping
+    # the final snapped position an exact equality check.
+    assert abs(moved_y - 12) <= 1, b["ops"][0]
+    a = run(test={"ops": [{"t": "name", "key": "Eastport|R08", "dx": 0, "dy": moved_y}]})
     assert not a["errors"] and not b["errors"], (a["errors"], b["errors"])
     assert a["ops"][0]["dy"] == b["ops"][0]["dy"], (a["ops"][0], b["ops"][0])
-    return "both dy=%s" % a["ops"][0]["dy"]
+    return "requested 12, represented %s; both dy=%s" % (moved_y, a["ops"][0]["dy"])
 
 
 @check("a code can only land on one of the eight quadrants")
