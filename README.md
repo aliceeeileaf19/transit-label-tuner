@@ -255,7 +255,8 @@ URL parameters drive them in batch and publish JSON into hidden `<pre>` nodes:
 | `?uitest=` | `#uitestresult` |
 
 ```sh
-python3 tools/selftest.py          # 20 checks, headless Chrome
+python3 tools/static_audit.py      # i18n, themes, demo contract, screenshots
+python3 tools/selftest.py          # 22 checks, headless Chrome
 python3 tools/make_demo_map.py     # regenerate the demo network
 ```
 

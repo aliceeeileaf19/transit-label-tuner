@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="A reproducible last-mile label editor for generated transit diagrams.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <title>Transit Label Tuner</title>
 <style>
   /* ===================================================================
@@ -53,6 +54,7 @@
     --topbar-border-left:1px solid rgba(20,24,25,.10);
     --topbar-mark:"LAYOUT / 01";
     --topbar-mark-fg:rgba(20,24,25,.28);
+    --topbar-mark-track:.15em;
     --topbar-mark-inset-r:16px; --topbar-mark-inset-b:11px;
     --topbar-pad:16px 17px 15px; --topbar-w:476px;
 
@@ -76,6 +78,7 @@
     --btn-hover-bg:#fff; --btn-hover-border:rgba(20,24,25,.25);
     --btn-hover-shadow:0 7px 15px rgba(27,32,33,.09);
     --btn-press:scale(.985);
+    --btn-transition:.14s;
     --pri-bg:#111415; --pri-fg:#fff; --pri-border:#111415;
     --pri-shadow:0 7px 16px rgba(17,20,21,.16);
     --pri-hover-bg:#25292a; --pri-hover-border:#25292a;
@@ -160,6 +163,7 @@
     --topbar-border-left:2px solid rgba(100,210,248,.76);
     --topbar-mark:"COMMAND / 01";
     --topbar-mark-fg:rgba(124,207,238,.32);
+    --topbar-mark-track:.16em;
     --topbar-mark-inset-r:14px; --topbar-mark-inset-b:9px;
     --topbar-pad:14px 16px 13px; --topbar-w:468px;
 
@@ -184,6 +188,7 @@
     --btn-hover-bg:rgba(114,169,238,.18); --btn-hover-border:var(--line-hot);
     --btn-hover-shadow:inset 0 1px 0 rgba(255,255,255,.11),0 7px 18px rgba(0,0,0,.18);
     --btn-press:scale(.98);
+    --btn-transition:.16s;
     --pri-bg:linear-gradient(135deg,rgba(33,135,184,.92),rgba(47,106,159,.92));
     --pri-fg:#e7f7ff; --pri-border:rgba(100,201,255,.58);
     --pri-shadow:inset 0 1px 0 rgba(210,244,255,.17),0 0 18px rgba(65,188,235,.14);
@@ -279,7 +284,7 @@
   #topbar:after{content:var(--topbar-mark);position:absolute;
     right:var(--topbar-mark-inset-r);bottom:var(--topbar-mark-inset-b);
     color:var(--topbar-mark-fg);font:700 8px ui-monospace,SFMono-Regular,monospace;
-    letter-spacing:.15em}
+    letter-spacing:var(--topbar-mark-track)}
   .brandRow{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:10px}
   .brandCopy{min-width:0}
   .eyebrow{display:block;margin-bottom:3px;color:var(--eyebrow-fg);font-size:var(--eyebrow-size);
@@ -312,7 +317,8 @@
   button{min-height:var(--btn-h);padding:var(--btn-pad);border:1px solid var(--btn-border);
     border-radius:var(--btn-radius);background:var(--btn-bg);color:var(--btn-fg);
     box-shadow:var(--btn-shadow);font-weight:var(--btn-weight);cursor:pointer;
-    transition:transform .14s ease,border-color .14s ease,background .14s ease,box-shadow .14s ease}
+    transition:transform var(--btn-transition) ease,border-color var(--btn-transition) ease,
+      background var(--btn-transition) ease,box-shadow var(--btn-transition) ease}
   button:hover{transform:translateY(-1px);border-color:var(--btn-hover-border);
     background:var(--btn-hover-bg);box-shadow:var(--btn-hover-shadow)}
   button:active{transform:translateY(0) var(--btn-press)}
@@ -3022,6 +3028,10 @@ function runUITest(){
         else if(op.t==="layer"){window.__layerLocks[op.name]=!!op.locked;applyLayerLocks();res.ops.push({layer:op.name,locked:!!op.locked});}
         else if(op.t==="preflight"){openPreflight();res.ops.push({preflight:$("#exportSummary").textContent,downloadDisabled:$("#btnDown").disabled});}
         else if(op.t==="draft"){saveDraft();res.ops.push({draft:draftAvailable()});}
+        else if(op.t==="restoreDraft"){$("#btnRestoreDraft").onclick();
+          res.ops.push({restoreDraft:true,movedNames:M.labels.filter(isMoved).length});}
+        else if(op.t==="reset"){window.resetAll();
+          res.ops.push({reset:true,movedNames:M.labels.filter(isMoved).length});}
       }catch(e){res.errors.push(String(e.message||e));}
     }
     const L=M.byKey.get("Cathedral|R06"),B=EXT.blocks.find(x=>x.id==="title-block");
@@ -3046,6 +3056,12 @@ function runUITest(){
       dockChildren:[...$("#rightDock").children].map(x=>x.id),downloadDisabled:$("#btnDown").disabled,
       theme:document.documentElement.getAttribute("data-theme"),tokens:tokens,
       paper:svgEl?getComputedStyle(svgEl).backgroundColor:null,draft:draftAvailable(),
+      renderedStyles:{page:getComputedStyle(document.body).backgroundImage,
+        pane:getComputedStyle($("#topbar")).backgroundImage,
+        button:getComputedStyle($("#btnExport")).backgroundImage,
+        buttonTransition:getComputedStyle($("#btnExport")).transitionDuration,
+        dockRadius:getComputedStyle($("#rightDock")).borderRadius,
+        table:getComputedStyle($("#counts td")).color},
       movedNames:M.labels.filter(isMoved).length,movedCodes:M.codes.filter(c=>c.grabbed).length,
       missingI18n,infoHTML:$("#info").innerHTML,probeExists:!!$("#xss-probe"),mapDockOverlap,
       sanitized:SANITIZED_ITEMS,unsafeProbe:globalThis.__unsafeProbe||0,
