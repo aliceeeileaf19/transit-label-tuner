@@ -700,6 +700,7 @@ const I18N = {
     "boot.step.index": "Indexing stations and labels…",
     "boot.err.notSvg": "No <svg> element in {path}",
     "boot.err.load": "Could not load {path}",
+    "boot.err.crossOrigin": "Cannot load {path}: SVG files must use the same origin as this tool. Serve the file beside the tool or under the same site.",
     "boot.err.unsafeSvg": "{path} is not a valid standalone SVG",
     "boot.err.outerSize": "Canvas never reported a real size (container is 0×0)",
     "boot.err.innerSize": "Inner map SVG never reported a real size",
@@ -897,6 +898,7 @@ const I18N = {
     "boot.step.index": "正在建立站點與標籤索引…",
     "boot.err.notSvg": "{path} 裡沒有 <svg>",
     "boot.err.load": "載入不到 {path}",
+    "boot.err.crossOrigin": "無法載入 {path}：SVG 必須和本工具同源。請把檔案放在工具旁邊，或由同一個網站提供。",
     "boot.err.unsafeSvg": "{path} 不是有效的獨立 SVG",
     "boot.err.outerSize": "等不到畫布的真實尺寸（容器 0×0）",
     "boot.err.innerSize": "等不到內層地圖 SVG 的真實尺寸",
@@ -2086,7 +2088,10 @@ async function boot(){
   try{
     const bootStep = key=>{ const el=$("#boot small"); if(el) el.textContent=t(key); };
     bootStep("boot.step.inline");
-    const response=await fetch(SVG_PATH);
+    const svgUrl=new URL(SVG_PATH,location.href);
+    if(svgUrl.origin!==location.origin)
+      throw new Error(t("boot.err.crossOrigin",{path:SVG_PATH}));
+    const response=await fetch(svgUrl);
     if(!response.ok) throw new Error(t("boot.err.load", {path:SVG_PATH}));
     const txt=await response.text();
     if(!SOURCE_FINGERPRINT || SOURCE_FINGERPRINT==="__SOURCE_SHA256__")

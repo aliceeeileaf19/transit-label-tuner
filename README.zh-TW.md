@@ -7,9 +7,9 @@
 
 [English → README.md](README.md)
 
-![載入示範路網的工具畫面](docs/screenshot-zh.png)
+[![動畫展示：用人眼微調，再把結果當成資料重播](docs/demo.gif)](https://aliceeeileaf19.github.io/transit-label-tuner/?lang=zh)
 
-<sub>四種組合皆已驗證——[中文深色](docs/screenshot-zh-dark.png) · [英文淺色](docs/screenshot-en.png) · [英文深色](docs/screenshot-dark.png)</sub>
+<sub>[開啟線上示範](https://aliceeeileaf19.github.io/transit-label-tuner/?lang=zh) · 四種組合皆已驗證——[中文淺色](docs/screenshot-zh.png) · [中文深色](docs/screenshot-zh-dark.png) · [英文淺色](docs/screenshot-en.png) · [英文深色](docs/screenshot-dark.png)</sub>
 
 **它不產出 SVG。** 你拖到圖好看為止，工具匯出一份**搬動清單**（純文字的位移表），
 再由你自己的產圖程式重新繪製。成品因此永遠是機器生成、可重現的，而人做的判斷則變成
@@ -55,6 +55,10 @@ http://localhost:8000/?svg=path/to/your-diagram.svg
 
 ……並修改 `index.html` 最上方的 `CONFIG`，讓選擇器對得上你的標記。見
 [地圖規格](#地圖規格)。
+
+`svg` 網址必須和工具**同源**。請把 SVG 放在同一個靜態伺服器底下（最簡單的是相對路
+徑）；Content Security Policy 會刻意擋掉跨網域地圖下載。被拒絕時介面會說明原因，不會
+只留下沒有訊息的載入失敗。
 
 ### SVG 信任邊界
 
@@ -248,8 +252,9 @@ URL 參數可批次驅動它們，結果以 JSON 寫進隱藏的 `<pre>` 節點�
 
 ```sh
 python3 tools/static_audit.py      # i18n、主題、示範圖契約、截圖格式
-python3 tools/selftest.py          # 23 項檢查，用無頭 Chrome
+python3 tools/selftest.py          # 24 項檢查，用無頭 Chrome
 python3 tools/make_demo_map.py     # 重新產生示範路網
+python3 tools/make_demo_animation.py  # 重生 docs/demo.gif（需要 Chrome 與 FFmpeg）
 ```
 
 ---

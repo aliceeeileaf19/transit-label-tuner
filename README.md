@@ -9,9 +9,9 @@ generator can position approximately but never quite right.
 
 [繁體中文說明 → README.zh-TW.md](README.zh-TW.md)
 
-![The tool with the demo network loaded](docs/screenshot-en.png)
+[![Animated overview: tune the diagram visually, then replay the result as data](docs/demo.gif)](https://aliceeeileaf19.github.io/transit-label-tuner/)
 
-<sub>Four verified combinations — [English dark](docs/screenshot-dark.png) · [Traditional Chinese light](docs/screenshot-zh.png) · [Traditional Chinese dark](docs/screenshot-zh-dark.png)</sub>
+<sub>[Try the live demo](https://aliceeeileaf19.github.io/transit-label-tuner/) · Four verified combinations — [English light](docs/screenshot-en.png) · [English dark](docs/screenshot-dark.png) · [Traditional Chinese light](docs/screenshot-zh.png) · [Traditional Chinese dark](docs/screenshot-zh-dark.png)</sub>
 
 **It never writes SVG.** You drag things until the diagram reads well, and the
 tool exports a *move list* — a plain-text table of offsets. Your own generator
@@ -63,6 +63,11 @@ http://localhost:8000/?svg=path/to/your-diagram.svg
 
 …and edit the `CONFIG` block at the top of `index.html` so the selectors match
 your markup. See [The map contract](#the-map-contract).
+
+The `svg` URL must be **same-origin** with the tool. Put the SVG under the same
+static server (a relative path is simplest); the Content Security Policy
+deliberately blocks cross-origin map downloads. A rejected URL is reported in
+the interface instead of failing silently.
 
 ### SVG trust boundary
 
@@ -277,8 +282,9 @@ URL parameters drive them in batch and publish JSON into hidden `<pre>` nodes:
 
 ```sh
 python3 tools/static_audit.py      # i18n, themes, demo contract, screenshots
-python3 tools/selftest.py          # 23 checks, headless Chrome
+python3 tools/selftest.py          # 24 checks, headless Chrome
 python3 tools/make_demo_map.py     # regenerate the demo network
+python3 tools/make_demo_animation.py  # regenerate docs/demo.gif (Chrome + FFmpeg)
 ```
 
 ---

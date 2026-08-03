@@ -9,7 +9,7 @@
 ## Checks
 
 - [ ] `python3 tools/static_audit.py` passes
-- [ ] `python3 tools/selftest.py` passes (23 checks)
+- [ ] `python3 tools/selftest.py` passes (24 checks)
 - [ ] If the demo network changed, it was regenerated with
       `python3 tools/make_demo_map.py` rather than hand-edited
 - [ ] If an interaction was added, it has a `window.*` hook that runs the same

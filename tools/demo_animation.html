@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Transit Label Tuner — README animation frame</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden}
+  body{
+    --phase:0;
+    background:
+      radial-gradient(circle at calc(14% + var(--phase)*2%) 18%,#dce9ff 0 9%,transparent 31%),
+      radial-gradient(circle at 88% 82%,#e8ddff 0 7%,transparent 29%),
+      linear-gradient(145deg,#f8fafc,#eef3fa 58%,#f8f5ff);
+    color:#172034;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  body::before{
+    content:"";position:absolute;inset:0;opacity:.32;
+    background-image:linear-gradient(#8391aa16 1px,transparent 1px),linear-gradient(90deg,#8391aa16 1px,transparent 1px);
+    background-size:32px 32px;mask-image:linear-gradient(to bottom,black,transparent 76%);
+  }
+  .eyebrow{
+    position:absolute;left:50%;top:34px;transform:translateX(-50%);
+    padding:8px 13px;border:1px solid #ffffffc9;border-radius:999px;
+    background:#ffffffb8;box-shadow:0 8px 28px #52617d18;backdrop-filter:blur(16px);
+    color:#526078;font:700 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+    letter-spacing:.16em;text-transform:uppercase;white-space:nowrap;
+  }
+  .scene{position:absolute;inset:0;perspective:1500px}
+  .halo{
+    position:absolute;left:50%;top:51%;width:760px;height:370px;border-radius:50%;
+    transform:translate(-50%,-50%) rotate(-7deg);filter:blur(26px);
+    background:linear-gradient(100deg,#4684ff2b,#8a63e629 60%,#34b88b24);
+  }
+  .app{
+    position:absolute;left:50%;top:52%;width:790px;height:400px;overflow:hidden;
+    border:1px solid #ffffffd9;border-radius:23px;background:#fff;
+    box-shadow:0 34px 70px #34425f2b,0 8px 20px #34425f1c,0 0 0 1px #7d8ba01a;
+    transform-style:preserve-3d;
+  }
+  .app img{display:block;width:100%;height:100%;object-fit:cover;object-position:center}
+  .shine{
+    position:absolute;inset:-40%;pointer-events:none;
+    background:linear-gradient(115deg,transparent 40%,#ffffff52 49%,transparent 58%);
+    mix-blend-mode:screen;
+  }
+  .card{
+    position:absolute;min-width:190px;padding:14px 16px;border:1px solid #ffffffd9;
+    border-radius:17px;background:#ffffffd6;backdrop-filter:blur(18px);
+    box-shadow:0 18px 46px #34425f24,0 1px 0 #fff inset;
+  }
+  .card .num{display:block;margin-bottom:6px;color:#5573e8;font:750 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.1em}
+  .card b{display:block;font-size:16px;letter-spacing:-.02em}
+  .card small{display:block;margin-top:5px;color:#657087;font-size:11px}
+  .tune{left:44px;top:150px}
+  .replay{right:39px;bottom:68px}
+  .export{
+    position:absolute;right:42px;top:121px;width:268px;padding:12px 14px;border-radius:14px;
+    background:#15201eea;color:#d5f8e5;box-shadow:0 18px 42px #26344b33;
+    font:10px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  .export strong{color:#77e3ad;font-weight:700}.export .muted{color:#92a5a0}
+  .cursor{position:absolute;width:29px;height:35px;filter:drop-shadow(0 4px 5px #25344f55)}
+  .cursor svg{display:block;width:100%;height:100%}
+  .pulse{
+    position:absolute;width:20px;height:20px;margin:-10px;border:2px solid #4f7dff;
+    border-radius:50%;box-shadow:0 0 0 7px #4f7dff1f;
+  }
+  .footer{
+    position:absolute;left:50%;bottom:25px;transform:translateX(-50%);
+    color:#637087;font-size:11px;letter-spacing:.025em;white-space:nowrap;
+  }
+</style>
+</head>
+<body>
+  <div class="eyebrow">Human judgement · replayable data</div>
+  <div class="scene">
+    <div class="halo"></div>
+    <div class="app">
+      <img src="../docs/screenshot-en.png" alt="Transit Label Tuner interface">
+      <div class="shine"></div>
+    </div>
+    <div class="card tune"><span class="num">01 · TUNE</span><b>Place by eye</b><small>Snap rules keep the diagram consistent.</small></div>
+    <div class="export"><span class="muted"># move-list.txt</span><br><strong>NAME_MOVES</strong><br>("Riverside", "Riverside", "R05",<br>&nbsp;0, -22, "middle", None, False, "...")</div>
+    <div class="card replay"><span class="num">02 · REPLAY</span><b>Keep it as data</b><small>Review, diff, and apply on every redraw.</small></div>
+    <div class="pulse"></div>
+    <div class="cursor"><svg viewBox="0 0 28 34" aria-hidden="true"><path d="M2 1.5v26l6.8-6.3 4.4 10.2 5.1-2.2-4.5-10.1h9.4z" fill="#fff" stroke="#172034" stroke-width="1.7" stroke-linejoin="round"/></svg></div>
+  </div>
+  <div class="footer">Transit Label Tuner · SVG in, reproducible move list out</div>
+<script>
+  const q=new URLSearchParams(location.search);
+  const frame=Number(q.get("frame")||0), frames=Math.max(1,Number(q.get("frames")||60));
+  const p=frame/frames*Math.PI*2, s=Math.sin(p), c=Math.cos(p);
+  const app=document.querySelector(".app");
+  app.style.transform=`translate(-50%,-50%) translate(${c*5}px,${s*7}px) rotateX(${1.8+s*.7}deg) rotateY(${-4+c*1.4}deg)`;
+  document.querySelector(".shine").style.transform=`translateX(${-18+c*28}%)`;
+  document.querySelector(".tune").style.transform=`translate(${c*10}px,${s*14}px) rotate(${-1.4+s*.5}deg)`;
+  document.querySelector(".replay").style.transform=`translate(${-c*12}px,${-s*11}px) rotate(${1.2-c*.4}deg)`;
+  document.querySelector(".export").style.transform=`translate(${s*8}px,${c*10}px) rotate(${-.8+s*.3}deg)`;
+  const travel=(1-c)/2, x=430+travel*250, y=314-travel*177+s*7;
+  const cursor=document.querySelector(".cursor"), pulse=document.querySelector(".pulse");
+  cursor.style.transform=`translate(${x}px,${y}px) rotate(${-7+s*5}deg)`;
+  pulse.style.transform=`translate(${x+4}px,${y+5}px) scale(${.78+(1+s)*.12})`;
+  pulse.style.opacity=String(.48+(1+s)*.18);
+  document.body.style.setProperty("--phase",String(travel));
+</script>
+</body>
+</html>

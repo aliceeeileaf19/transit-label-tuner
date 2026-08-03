@@ -251,6 +251,16 @@ def _(run):
     return "19 labels tabbable; localized focus selects and moves Northfield"
 
 
+@check("cross-origin SVG URLs fail with a localized explanation")
+def _(run):
+    remote = "https://example.invalid/map.svg"
+    en = run(_expect_boot_error=True, svg=remote, lang="en")
+    zh = run(_expect_boot_error=True, svg=remote, lang="zh")
+    assert "same origin" in en["error"] and remote in en["error"], en
+    assert "同源" in zh["error"] and remote in zh["error"], zh
+    return "same-origin contract explained in English and Chinese"
+
+
 @check("blocks move and report their own collisions")
 def _(run):
     r = run(exttest={"ops": [{"k": "block", "id": "legend", "dx": -40, "dy": 0}]})
@@ -462,12 +472,17 @@ def main():
 
     def run(**params):
         window_size = params.pop("_window_size", None)
+        expect_boot_error = params.pop("_expect_boot_error", False)
         q = {}
         for k, v in params.items():
             q[k] = v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
         q.setdefault("lang", "en")
         url = base + "?" + urllib.parse.urlencode(q)
         dom = dump_dom(chrome, url, window_size=window_size)
+        if expect_boot_error:
+            title = re.search(r"<title>RESULT(.*?)</title>", dom, re.S)
+            assert title, "boot did not publish an error result"
+            return json.loads(unescape(title.group(1)))
         for key, node in (("uitest", "uitestresult"), ("ext2test", "ext2result"),
                           ("exttest", "extresult"), ("test", "testresult")):
             if key in q:
