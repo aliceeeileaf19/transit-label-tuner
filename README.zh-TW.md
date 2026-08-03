@@ -229,7 +229,8 @@ URL 參數可批次驅動它們，結果以 JSON 寫進隱藏的 `<pre>` 節點�
 | `?uitest=` | `#uitestresult` |
 
 ```sh
-python3 tools/selftest.py          # 20 項檢查，用無頭 Chrome
+python3 tools/static_audit.py      # i18n、主題、示範圖契約、截圖格式
+python3 tools/selftest.py          # 22 項檢查，用無頭 Chrome
 python3 tools/make_demo_map.py     # 重新產生示範路網
 ```
 
