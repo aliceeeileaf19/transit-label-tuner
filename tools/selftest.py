@@ -310,6 +310,28 @@ def _(run):
     return "undo/redo/undo clean"
 
 
+@check("draft restore and Reset all both restore complete geometry")
+def _(run):
+    draft = run(uitest={"ops": [
+        {"t": "name", "key": "Glasshouse|G02", "dx": 0, "dy": 6},
+        {"t": "draft"},
+        {"t": "name", "key": "Glasshouse|G02", "dx": 0, "dy": 12},
+        {"t": "restoreDraft"},
+    ]})
+    assert not draft["errors"], draft["errors"]
+    assert draft["ops"][-1]["movedNames"] == 1, draft["ops"]
+    assert draft["state"]["movedNames"] == 1, draft["state"]
+    reset = run(uitest={"ops": [
+        {"t": "name", "key": "Glasshouse|G02", "dx": 0, "dy": 6},
+        {"t": "block", "id": "title-block", "dx": 4, "dy": 0},
+        {"t": "reset"},
+    ]})
+    assert not reset["errors"], reset["errors"]
+    assert reset["ops"][-1]["movedNames"] == 0, reset["ops"]
+    assert reset["state"]["movedNames"] == 0 and reset["state"]["blockDx"] == 0, reset["state"]
+    return "draft restored one move; Reset all cleared name and block moves"
+
+
 @check("both interface languages render without falling back")
 def _(run):
     en = run(uitest="1", lang="en")
@@ -342,6 +364,15 @@ def _(run):
         missing = [k for k, v in t.items() if not v.strip()]
         assert not missing, "%s theme has unresolved tokens: %s" % (name, missing)
         assert len(t) >= 140, "%s only exposed %d theme tokens" % (name, len(t))
+        rendered = r["state"]["renderedStyles"]
+        assert not any("var(" in value for value in rendered.values()), \
+            "%s theme left an unresolved rendered value: %s" % (name, rendered)
+    assert light["state"]["renderedStyles"] != dark["state"]["renderedStyles"], \
+        "theme toggle did not change any sampled rendered style"
+    light_durations = {part.strip() for part in light["state"]["renderedStyles"]["buttonTransition"].split(",")}
+    dark_durations = {part.strip() for part in dark["state"]["renderedStyles"]["buttonTransition"].split(",")}
+    assert light_durations == {"0.14s"}, light["state"]
+    assert dark_durations == {"0.16s"}, dark["state"]
     assert light["state"]["paper"] == dark["state"]["paper"], \
         "the artwork background must not change with the theme"
     return "light/dark both resolve %d tokens, paper=%s" % (
@@ -387,6 +418,15 @@ def _(run):
     assert not r["errors"], r["errors"]
     assert r["state"]["mapDockOverlap"] is False, r["state"]
     return "900x800 map and dock do not overlap"
+
+
+@check("Fit keeps the map clear of the right dock on a desktop viewport")
+def _(run):
+    r = run(uitest={"ops": []}, _window_size="1600,1000")
+    assert not r["errors"], r["errors"]
+    assert r["state"]["mapDockOverlap"] is False, r["state"]
+    assert r["state"]["mapRect"]["right"] <= r["state"]["dockRect"]["left"], r["state"]
+    return "1600x1000 map ends before the right dock begins"
 
 
 # --------------------------------------------------------------------------
