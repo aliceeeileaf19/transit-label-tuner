@@ -184,6 +184,23 @@ Python 風格的 tuple 列，每種編輯一個區段。這是**機器產物：�
 
 檔頭帶著來源檔名、格式版本與來源指紋，所以一份搬動清單是自我描述的。
 
+### 參考套用流程：把迴圈接完
+
+`tools/reference_applier.py` 用 Python AST 的 literal parser 解析所有區段，既不 import
+也不執行搬動清單；遇到多餘敘述或欄位型別錯誤會直接中止。示範產生器會在重繪時讀取最
+通用的站名、站碼與角度覆寫，完整示範「人調整 → 匯出資料 → 產生器重繪」，但瀏覽器本
+身仍然不修改 SVG：
+
+```sh
+python3 tools/reference_applier.py examples/reference-moves.txt
+python3 tools/make_demo_map.py \
+  --moves examples/reference-moves.txt \
+  --output /tmp/demo-with-moves.svg
+```
+
+正規化後的資料也保留區塊、引線、示意框與新線，讓各專案自己的產生器接續使用。示範產
+生器刻意只實作站名、站碼與角度，因為它沒有承載其他類型所需的外部資料來源。
+
 ---
 
 ## 鍵盤
@@ -191,6 +208,7 @@ Python 風格的 tuple 列，每種編輯一個區段。這是**機器產物：�
 | | |
 |---|---|
 | 滾輪／空白＋拖曳 | 縮放／平移 |
+| Tab／Shift+Tab | 依序聚焦站名，並選取目前聚焦的站名 |
 | 方向鍵 | 選取項目微調一個 unit（區塊按 Shift 為十個） |
 | `[` `]` `\` | 轉平／轉斜／回到原角度 |
 | `+` `-` `R` | 選取的區塊縮放 2%／還原大小 |
@@ -230,7 +248,7 @@ URL 參數可批次驅動它們，結果以 JSON 寫進隱藏的 `<pre>` 節點�
 
 ```sh
 python3 tools/static_audit.py      # i18n、主題、示範圖契約、截圖格式
-python3 tools/selftest.py          # 22 項檢查，用無頭 Chrome
+python3 tools/selftest.py          # 23 項檢查，用無頭 Chrome
 python3 tools/make_demo_map.py     # 重新產生示範路網
 ```
 
@@ -271,8 +289,8 @@ python3 tools/make_demo_map.py     # 重新產生示範路網
 
 ## 已知限制
 
-- 拖曳只支援滑鼠。鍵盤使用者可以用方向鍵微調**已選取**的項目，但還沒有跨站名的 Tab
-  巡覽順序。
+- 自由拖曳只支援滑鼠。鍵盤使用者可以用 Tab 巡覽站名，再用方向鍵微調聚焦的站名；站碼
+  與版面區塊還沒有完整的焦點順序。
 - 碰撞統計是視野內的 O(n²)。在有數千個標籤的圖上，第一輪明顯偏慢；它在背景執行，完
   成後才解鎖匯出。
 - 首次開啟的主要成本是解析大型內嵌 SVG，尚未做串流或拆檔。

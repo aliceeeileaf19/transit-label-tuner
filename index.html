@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="A reproducible last-mile label editor for generated transit diagrams.">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <title>Transit Label Tuner</title>
 <style>
@@ -262,6 +264,7 @@
   /* Interaction states are class-only — never a geometry attribute — and are
      drawn on the artwork, so they stay constant across themes. */
   .tlt-label,.tlt-code-group text{cursor:move}
+  .tlt-label:focus-visible{outline:2px solid #0a58ca;outline-offset:3px}
   .dt-hot{fill:#0a58ca !important}
   .dt-hot-ldr{stroke:#0a58ca !important;stroke-width:1.6 !important}
   .dt-sel{fill:#b8860b !important}
@@ -722,6 +725,7 @@ const I18N = {
     "key.arrows.do": "nudge",
     "key.esc.do": "cancel",
     "key.trace.do": "trace",
+    "a11y.label": "Station name {name}, code {code}. Use arrow keys to move.",
 
     "dock.aria": "LAYOUT CONTROLS",
     "search.title": "Find and jump to a station",
@@ -918,6 +922,7 @@ const I18N = {
     "key.arrows.do": "微調",
     "key.esc.do": "取消",
     "key.trace.do": "描線",
+    "a11y.label": "站名 {name}，站碼 {code}。可用方向鍵微調。",
 
     "dock.aria": "排版工具",
     "search.title": "搜尋並跳到站點",
@@ -1265,6 +1270,13 @@ function parseRotate(el){
   return m ? {a:parseFloat(m[1]), cx:parseFloat(m[2]), cy:parseFloat(m[3])} : null;
 }
 
+function updateLabelA11y(L){
+  if(!L.st){ L.el.removeAttribute("tabindex"); L.el.removeAttribute("aria-label"); return; }
+  L.el.setAttribute("tabindex","0");
+  L.el.setAttribute("aria-label",t("a11y.label",{name:L.text,code:L.st.code}));
+}
+RELABEL.push(()=>{ for(const L of M.labels) updateLabelA11y(L); });
+
 function buildModel(){
   /* --- stations: data-x/data-y are authoritative, not the rendered circle --- */
   for(const el of root.querySelectorAll(SEL.station)){
@@ -1296,6 +1308,7 @@ function buildModel(){
                rot: rot? rot.a : null, rot0: rot? rot.a : null,
                hasRot: !!rot, ldr:null, code:null, veto:false};
     M.labels.push(L);
+    updateLabelA11y(L);
     if(st) M.byKey.set(t+"|"+st.code, L);
   }
 
@@ -1642,6 +1655,16 @@ function select(L, obj, kind){
   if(sel) sel.el.classList.remove("dt-sel");
   sel = obj; obj.el.classList.add("dt-sel"); sel._kind = kind;
 }
+
+/* SVG labels are in the normal Tab order. Focusing one enters the exact same
+   selection path used by a mouse press, after which the existing arrow-key
+   handler provides one-unit nudges. */
+host.addEventListener("focusin",e=>{
+  if(!e.target.matches || !e.target.matches(SEL.label)) return;
+  const L=M.labels.find(x=>x.el===e.target);
+  if(!L || !L.st) return;
+  select(L,L,"name"); hot(L,L.code);
+});
 
 window.addEventListener("keydown", e=>{
   if(e.target && e.target.closest && e.target.closest("input,textarea")) return;
@@ -2147,6 +2170,11 @@ function runTest(){
         }
         else if(op.t==="undo"){ window.undo(); res.ops.push({undo:true}); }
         else if(op.t==="focus"){ res.ops.push(window.focusOn(op.key, op.z||6)); }
+        else if(op.t==="focusLabel"){
+          const L=M.byKey.get(op.key);if(!L)throw new Error("Not found: "+op.key);
+          L.el.focus();res.ops.push({focusLabel:op.key,active:document.activeElement===L.el,
+            aria:L.el.getAttribute("aria-label")});
+        }
         else if(op.t==="click"){ const b=$(op.sel); if(!b) throw new Error("Selector not found: "+op.sel);
                                  b.click(); res.ops.push({click:op.sel}); }
         else if(op.t==="key"){
@@ -2171,7 +2199,8 @@ function runTest(){
     res.model = {stations:M.stations.length, labels:M.labels.length,
                  codes:M.codes.length, leaders:M.labels.filter(L=>L.ldr).length,
                  panels:M.panels.length, mapScale:+userScale().toFixed(6),
-                 mapViewBox:(mapEl.getAttribute("viewBox")||"")};
+                 mapViewBox:(mapEl.getAttribute("viewBox")||""),
+                 tabbableLabels:M.labels.filter(L=>L.el.getAttribute("tabindex")==="0").length};
   }catch(e){ res.errors.push("could not parse ?test= : "+String(e.message||e)); }
   const json = JSON.stringify(res);
   document.title = "RESULT"+json;

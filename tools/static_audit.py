@@ -62,6 +62,19 @@ def audit_i18n():
     return len(en), len(used)
 
 
+def audit_csp():
+    match = re.search(r'<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]+)"', HTML, re.S)
+    assert match, "Content-Security-Policy meta tag is missing"
+    directives = {part.strip().split()[0]: part.strip().split()[1:]
+                  for part in match.group(1).split(";") if part.strip()}
+    assert directives.get("default-src") == ["'none'"]
+    assert directives.get("base-uri") == ["'none'"]
+    assert directives.get("form-action") == ["'none'"]
+    assert directives.get("connect-src") == ["'self'"]
+    assert "https:" not in match.group(1) and "http:" not in match.group(1)
+    return len(directives)
+
+
 def audit_themes():
     css = re.search(r"<style>(.*?)</style>", HTML, re.S).group(1)
     light = balanced_block(css, ':root, :root[data-theme="light"]{')
@@ -80,6 +93,14 @@ def audit_themes():
 
 def load_generator():
     spec = importlib.util.spec_from_file_location("demo_gen", ROOT / "tools/make_demo_map.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_reference_applier():
+    spec = importlib.util.spec_from_file_location(
+        "reference_applier", ROOT / "tools/reference_applier.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -182,6 +203,60 @@ def audit_demo():
         smallest = min(containing, key=lambda rect: number(rect, "width") * number(rect, "height"))
         origins.append((round(number(smallest, "x")), round(number(smallest, "y"))))
     assert sorted(origins) == [(25, 300), (620, 425)]
+
+    # The second implementation closes the documented loop: exported text is
+    # parsed without execution, then the generator consumes normalized
+    # overrides while it redraws (the browser itself still never writes SVG).
+    applier = load_reference_applier()
+    reference_text = (ROOT / "examples/reference-moves.txt").read_text(encoding="utf-8")
+    parsed = applier.parse_move_list(reference_text)
+    moved_root = ET.fromstring(gen.build(parsed))
+    moved_inner = moved_root.find("s:svg[@id='map']", ns)
+    moved_labels = moved_inner.findall(".//s:text[@class='lbl']", ns)
+    riverside = [label for label in moved_labels
+                 if "".join(label.itertext()) == "Riverside"
+                 and abs(number(label, "x") - 430) < .001]
+    assert len(riverside) == 1 and abs(number(riverside[0], "y") - 238) < .001
+    old_mill = [label for label in moved_labels if "".join(label.itertext()) == "Old Mill"]
+    assert len(old_mill) == 1 and old_mill[0].attrib.get("transform", "").startswith("rotate(-60 ")
+    cathedral_code = moved_inner.find(
+        ".//s:g[@class='stn-code'][@data-name='Cathedral'][@data-code='R06']/s:text", ns)
+    assert cathedral_code is not None
+    assert abs(number(cathedral_code, "x") - 518) < .001
+    assert abs(number(cathedral_code, "y") - 262.5) < .001
+    assert cathedral_code.attrib.get("text-anchor") == "start"
+    try:
+        applier.parse_move_list(reference_text.replace(
+            '("Riverside", "Riverside", "R05", 0, -22',
+            '("Riverside", "Riverside", "R05", __import__("os"), -22'))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("reference parser accepted executable syntax")
+    try:
+        applier.parse_move_list(reference_text + '\nprint("must be rejected")\n')
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("reference parser ignored an unexpected statement")
+    try:
+        applier.parse_move_list(reference_text.replace(
+            '"R05", 0, -22', '"R05", True, -22'))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("reference parser accepted a boolean displacement")
+    tampered = applier.parse_move_list(reference_text.replace(
+        parsed["metadata"]["fingerprint"], "0" * 64))
+    tampered["name_moves"] = []
+    tampered["code_nudges"] = []
+    tampered["chain_angles"] = []
+    try:
+        gen.build(tampered)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("demo generator accepted the wrong source fingerprint")
     return len(stations), len(codes), len(leaders), len(routes)
 
 
@@ -198,12 +273,14 @@ def audit_screenshots():
 
 def main():
     locales, used = audit_i18n()
+    csp = audit_csp()
     tokens = audit_themes()
     stations, codes, leaders, routes = audit_demo()
     shots = audit_screenshots()
     print("i18n: %d symmetric keys; %d direct/static uses resolved" % (locales, used))
+    print("security: CSP has %d directives and permits no remote origin" % csp)
     print("themes: %d matching semantic tokens; every var() is defined" % tokens)
-    print("demo: %d stations / %d codes / %d leaders / %d routes; contract valid" % (
+    print("demo: %d stations / %d codes / %d leaders / %d routes; contract and reference redraw valid" % (
         stations, codes, leaders, routes))
     print("screenshots: %d files contain real PNG data" % shots)
 

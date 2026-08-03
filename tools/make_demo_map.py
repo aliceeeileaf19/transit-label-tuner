@@ -23,6 +23,7 @@ Structure produced (this is the contract the tool expects; see README):
 Run:  python3 tools/make_demo_map.py
 """
 
+import hashlib
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parent.parent / "demo" / "demo-map.svg"
@@ -188,7 +189,28 @@ def schematic(x, y, w, h, caption, marker="SCHEMATIC ONLY"):
     ]
 
 
-def build():
+def build(moves=None):
+    supplied_moves = moves is not None
+    moves = moves or {"name_moves": [], "code_nudges": [], "chain_angles": []}
+    if supplied_moves:
+        metadata = moves.get("metadata", {})
+        if metadata.get("source") != OUT.name:
+            raise ValueError("move list source is not %s" % OUT.name)
+        if metadata.get("format") != "2":
+            raise ValueError("move list format is not 2")
+        fingerprint = hashlib.sha256(OUT.read_bytes()).hexdigest()
+        if metadata.get("fingerprint") != fingerprint:
+            raise ValueError("move list fingerprint does not match the canonical demo")
+    name_moves = {(row["label"], row["code"]): row for row in moves.get("name_moves", [])}
+    code_nudges = {(row["station"], row["data_code"], row["code"]): row
+                   for row in moves.get("code_nudges", [])}
+    angle_by_label = {}
+    station_names = [row[1] for row in STATIONS]
+    for row in moves.get("chain_angles", []):
+        for label in row["labels"]:
+            if station_names.count(label) != 1:
+                raise ValueError("angle target %r is not a unique demo label" % label)
+            angle_by_label[label] = row
     by_code = {s[0]: s for s in STATIONS}
     L = []
     L.append('<svg xmlns="http://www.w3.org/2000/svg" '
@@ -253,6 +275,20 @@ def build():
     L.append('<g id="labels">')
     for code, name, x, y, extra in STATIONS:
         dx, dy, anchor, rot, _ = LABELS[code]
+        moved = name_moves.get((name, code))
+        if moved:
+            if moved["station"] != name:
+                raise ValueError("station mismatch for %s|%s" % (name, code))
+            if moved["original_angle"] != rot:
+                raise ValueError("original angle mismatch for %s|%s" % (name, code))
+            if moved["has_leader"] != LABELS[code][4]:
+                raise ValueError("leader mismatch for %s|%s" % (name, code))
+            dx, dy, anchor = moved["dx"], moved["dy"], moved["anchor"]
+        angle = angle_by_label.get(name)
+        if angle:
+            if angle["old_angle"] != rot:
+                raise ValueError("CHAIN_ANGLES old angle mismatch for %s" % name)
+            rot = angle["new_angle"]
         lx, ly = x + dx, y + dy
         tr = ' transform="rotate(%g %g %g)"' % (rot, lx, ly) if rot is not None else ""
         L.append('  <text class="lbl" x="%g" y="%g" text-anchor="%s" font-size="13" '
@@ -264,7 +300,13 @@ def build():
     L.append('<g id="codes">')
     for code, name, x, y, extra in STATIONS:
         for c in [code] + extra:
-            sx, sy, anchor = SLOTS[CODE_SLOT[c]]
+            slot = CODE_SLOT[c]
+            moved = code_nudges.get((name, c, c))
+            if moved:
+                if moved["old_slot"] != slot:
+                    raise ValueError("old code slot mismatch for %s|%s" % (name, c))
+                slot = moved["slot"]
+            sx, sy, anchor = SLOTS[slot]
             colour = LINE_OF[c[0]]
             L.append('  <g class="stn-code" data-name="%s" data-code="%s" '
                      'data-station-x="%g" data-station-y="%g">' % (esc(name), c, x, y))
@@ -279,6 +321,9 @@ def build():
     for code in ("R06", "B03", "G05"):
         _, name, x, y, _ = by_code[code]
         dx, dy, _a, _r, has = LABELS[code]
+        moved = name_moves.get((name, code))
+        if moved:
+            dx, dy = moved["dx"], moved["dy"]
         if not has:
             continue
         L.append('  <line class="ldr" x1="%g" y1="%g" x2="%g" y2="%g" stroke="%s" '
@@ -304,9 +349,21 @@ def build():
 
 
 if __name__ == "__main__":
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    tmp = OUT.with_suffix(".svg.new")
-    tmp.write_text(build(), encoding="utf-8")
+    import argparse
     import os
-    os.replace(tmp, OUT)
-    print("wrote %s (%d bytes)" % (OUT, OUT.stat().st_size))
+    parser = argparse.ArgumentParser(description="Generate the fictional demo network")
+    parser.add_argument("--moves", type=Path, help="move list to apply during redraw")
+    parser.add_argument("--output", type=Path, help="output path (required with --moves)")
+    args = parser.parse_args()
+    if args.moves and not args.output:
+        parser.error("--moves requires --output so the canonical demo is not overwritten")
+    parsed = None
+    if args.moves:
+        from reference_applier import load_move_list
+        parsed = load_move_list(args.moves)
+    output = args.output or OUT
+    output.parent.mkdir(parents=True, exist_ok=True)
+    tmp = output.with_suffix(output.suffix + ".new")
+    tmp.write_text(build(parsed), encoding="utf-8")
+    os.replace(tmp, output)
+    print("wrote %s (%d bytes)" % (output, output.stat().st_size))

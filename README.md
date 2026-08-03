@@ -210,6 +210,26 @@ Two conventions that will save you a debugging session:
 The header carries the source filename, the format version and the source
 fingerprint, so a move list is self-describing.
 
+### Reference integration: close the loop
+
+`tools/reference_applier.py` parses every section with Python's AST literal
+parser without importing or executing the move-list file. Unexpected
+statements and malformed field types fail closed. The demo generator consumes
+the universal name, code and angle overrides while it redraws, which
+demonstrates the intended loop without teaching the browser to patch SVG:
+
+```sh
+python3 tools/reference_applier.py examples/reference-moves.txt
+python3 tools/make_demo_map.py \
+  --moves examples/reference-moves.txt \
+  --output /tmp/demo-with-moves.svg
+```
+
+The normalized parser output also carries layout blocks, leaders, proposal
+boxes and new lines for a project-specific generator to consume. The demo
+generator intentionally implements only station names, codes and angles: it
+has no external data source for the other kinds.
+
 ---
 
 ## Keyboard
@@ -217,6 +237,7 @@ fingerprint, so a move list is self-describing.
 | | |
 |---|---|
 | Wheel / Space+drag | zoom / pan |
+| Tab / Shift+Tab | move focus through station names and select the focused name |
 | Arrow keys | nudge the selection by one unit (Shift: ten, for blocks) |
 | `[` `]` `\` | flatten / steepen / restore the original angle |
 | `+` `-` `R` | scale the selected block by 2% / reset its size |
@@ -256,7 +277,7 @@ URL parameters drive them in batch and publish JSON into hidden `<pre>` nodes:
 
 ```sh
 python3 tools/static_audit.py      # i18n, themes, demo contract, screenshots
-python3 tools/selftest.py          # 22 checks, headless Chrome
+python3 tools/selftest.py          # 23 checks, headless Chrome
 python3 tools/make_demo_map.py     # regenerate the demo network
 ```
 
@@ -308,8 +329,9 @@ moment of the drag.
 
 ## Known limitations
 
-- Dragging is mouse-only. Keyboard users can nudge a *selected* item with the
-  arrow keys, but there is no Tab order across station names yet.
+- Free-form dragging is mouse-only. Keyboard users can Tab through station
+  names and nudge the focused name with arrow keys; codes and layout blocks do
+  not yet have a complete focus order.
 - The overlap count is O(n²) over what is in view. On a diagram with thousands
   of labels the first pass is noticeably slow; it runs in the background and
   export unlocks when it finishes.
