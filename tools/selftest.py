@@ -233,6 +233,24 @@ def _(run):
     return "no rows left after undo"
 
 
+@check("Tab focus enters station-name selection and arrow keys move it")
+def _(run):
+    r = run(test={"ops": [
+        {"t": "focusLabel", "key": "Northfield|B01"},
+        {"t": "key", "k": "ArrowRight"},
+    ]})
+    assert not r["errors"], r["errors"]
+    assert r["ops"][0]["active"] is True, r["ops"][0]
+    assert "Northfield" in r["ops"][0]["aria"] and "B01" in r["ops"][0]["aria"], r["ops"][0]
+    assert r["model"]["tabbableLabels"] == 19, r["model"]
+    rows = r["export"]["nameRows"]
+    assert len(rows) == 1 and rows[0]["text"] == "Northfield", rows
+    zh = run(test={"ops": [{"t": "focusLabel", "key": "Northfield|B01"}]}, lang="zh")
+    assert not zh["errors"], zh["errors"]
+    assert "站名" in zh["ops"][0]["aria"] and "B01" in zh["ops"][0]["aria"], zh["ops"][0]
+    return "19 labels tabbable; localized focus selects and moves Northfield"
+
+
 @check("blocks move and report their own collisions")
 def _(run):
     r = run(exttest={"ops": [{"k": "block", "id": "legend", "dx": -40, "dy": 0}]})

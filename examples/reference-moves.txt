@@ -1,0 +1,27 @@
+# Move list — exported by Transit Label Tuner
+# source diagram : demo-map.svg
+# format version : 2
+# source fingerprint : 611fb9623933a91cf98d4946f378b6fc80a535eae0209539c0aa9179c4b2b19a
+
+# ---- NAME_MOVES (label text, station name, station code, dx, dy, anchor, angle, has leader, why) ----
+    ("Riverside", "Riverside", "R05", 0, -22, "middle", None, False,
+     "reference integration example"),
+
+# ---- CODE_NUDGES (station name, group data-code, code text, new quadrant, old quadrant, why) ----
+    ("Cathedral", "R06", "R06", "E", "S", "reference integration example"),
+
+# ---- CHAIN_ANGLES (chain name, [labels...], old angle, new angle, why) ----
+    ("Old Mill R03 single", ["Old Mill"], -50, -60, "reference integration example"),
+
+# The demo generator consumes the three universal station-label sections
+# above. These project-specific sections remain available to other generators.
+# ---- LAYOUT_NUDGE ----
+LAYOUT_NUDGE = {}
+# ---- LAYOUT_SCALE ----
+LAYOUT_SCALE = {}
+# ---- LEADER_NUDGE ----
+LEADER_NUDGE = []
+# ---- SCHEMATIC_ANCHOR ----
+SCHEMATIC_ANCHOR = {}
+# ---- NEW_LINE ----
+NEW_LINE = []
