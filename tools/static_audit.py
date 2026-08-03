@@ -210,6 +210,25 @@ def audit_demo():
     applier = load_reference_applier()
     reference_text = (ROOT / "examples/reference-moves.txt").read_text(encoding="utf-8")
     parsed = applier.parse_move_list(reference_text)
+    missing_name_marker = re.sub(
+        r"^# ---- NAME_MOVES[^\n]*\n", "", reference_text, count=1, flags=re.M)
+    truncated = reference_text[:400]
+    missing_new_line = re.sub(r"^NEW_LINE = \[\]\s*$", "", reference_text,
+                              count=1, flags=re.M)
+    for broken, expected in (
+            (missing_name_marker, "NAME_MOVES"),
+            (truncated, "CODE_NUDGES"),
+            (missing_new_line, "NEW_LINE")):
+        try:
+            applier.parse_move_list(broken)
+        except ValueError as exc:
+            assert expected in str(exc), (expected, str(exc))
+        else:
+            raise AssertionError("reference parser accepted a move list missing %s" % expected)
+    without_angles = re.sub(
+        r"\n# ---- CHAIN_ANGLES.*?(?=\n# ---- LAYOUT_NUDGE)", "", reference_text,
+        count=1, flags=re.S)
+    assert applier.parse_move_list(without_angles)["chain_angles"] == []
     moved_root = ET.fromstring(gen.build(parsed))
     moved_inner = moved_root.find("s:svg[@id='map']", ns)
     moved_labels = moved_inner.findall(".//s:text[@class='lbl']", ns)
