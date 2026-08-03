@@ -27,7 +27,8 @@ block that on the file protocol. Any static server is fine.
 
 ```sh
 python3 tools/static_audit.py    # translations, themes, demo contract, screenshots
-python3 tools/selftest.py        # 23 headless checks
+python3 tools/selftest.py        # 24 headless checks
+python3 tools/make_demo_animation.py  # README GIF; needs Chrome and FFmpeg
 ```
 
 It needs Chrome or Chromium; pass `--chrome /path/to/binary` if it cannot find
@@ -140,7 +141,7 @@ formatter; there is also not much code.
 - **跑起來**：`python3 -m http.server 8000`，然後開 `http://localhost:8000/`。
   沒有任何安裝步驟。`file://` 不能用（`fetch()` 會被瀏覽器擋）。
 - **送 PR 前**：先跑 `python3 tools/static_audit.py`，再跑
-  `python3 tools/selftest.py`（23 項，需要 Chrome）。
+  `python3 tools/selftest.py`（24 項，需要 Chrome）。
 - **動過示範圖**：跑 `python3 tools/make_demo_map.py` 重生，**不要手改 SVG**。
   CI 會比對產生器輸出，手改一定失敗。
 - **換自己的地圖**：只改 `index.html` 最上方的 `CONFIG`。如果有跟地圖相關的東西

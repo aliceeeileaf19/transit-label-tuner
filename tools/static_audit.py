@@ -271,18 +271,31 @@ def audit_screenshots():
     return len(names)
 
 
+def audit_animation():
+    path = ROOT / "docs" / "demo.gif"
+    data = path.read_bytes()
+    assert data[:6] in (b"GIF87a", b"GIF89a"), "docs/demo.gif is not GIF data"
+    width, height = struct.unpack("<HH", data[6:10])
+    assert (width, height) == (960, 540), "demo.gif is %dx%d, expected 960x540" % (
+        width, height)
+    assert len(data) <= 8 * 1024 * 1024, "demo.gif exceeds the 8 MiB README budget"
+    return len(data)
+
+
 def main():
     locales, used = audit_i18n()
     csp = audit_csp()
     tokens = audit_themes()
     stations, codes, leaders, routes = audit_demo()
     shots = audit_screenshots()
+    animation_bytes = audit_animation()
     print("i18n: %d symmetric keys; %d direct/static uses resolved" % (locales, used))
     print("security: CSP has %d directives and permits no remote origin" % csp)
     print("themes: %d matching semantic tokens; every var() is defined" % tokens)
     print("demo: %d stations / %d codes / %d leaders / %d routes; contract and reference redraw valid" % (
         stations, codes, leaders, routes))
     print("screenshots: %d files contain real PNG data" % shots)
+    print("animation: GIF is 960x540 and %.2f MiB" % (animation_bytes / 1024 / 1024))
 
 
 if __name__ == "__main__":

@@ -2,6 +2,19 @@
 
 Notable changes to Transit Label Tuner are recorded here.
 
+## Unreleased
+
+### Added
+
+- Reproducible animated README overview generated with plain HTML/CSS, Chrome,
+  and FFmpeg; no animation dependency is shipped with the tool.
+- A localized, explicit error when `?svg=` points to a cross-origin URL.
+
+### Changed
+
+- Documented that SVG input must share an origin with the tool, matching the
+  Content Security Policy instead of allowing the browser to fail silently.
+
 ## [0.1.0] — 2026-08-03
 
 Initial public release candidate.
