@@ -23,7 +23,7 @@ stays reviewable, diffable and replayable.
    your generator ──► diagram.svg ──► [ Transit Label Tuner ] ──► move-list.txt
           ▲                                                            │
           └────────────────────────────────────────────────────────────┘
-                        applied on the next render
+                  consumed by your generator on the next render
 ```
 
 That loop is the whole point. Hand-editing the output of a generator is a
@@ -215,13 +215,20 @@ Two conventions that will save you a debugging session:
 The header carries the source filename, the format version and the source
 fingerprint, so a move list is self-describing.
 
-### Reference integration: close the loop
+Official exports always include `NAME_MOVES`, `CODE_NUDGES` and the five
+assignment sections, even when they are empty. `CHAIN_ANGLES` is the one
+optional section: it is omitted when no angle changed. The reference parser
+rejects a file missing any required section, so truncation cannot silently
+turn edits into empty output.
+
+### Reference integration: parse and replay moves
 
 `tools/reference_applier.py` parses every section with Python's AST literal
-parser without importing or executing the move-list file. Unexpected
-statements and malformed field types fail closed. The demo generator consumes
-the universal name, code and angle overrides while it redraws, which
-demonstrates the intended loop without teaching the browser to patch SVG:
+parser without importing or executing the move-list file. Missing required
+sections, unexpected statements and malformed field types fail closed. The
+demo generator consumes the universal name, code and angle overrides while it
+redraws, which demonstrates the intended loop without teaching the browser to
+patch SVG:
 
 ```sh
 python3 tools/reference_applier.py examples/reference-moves.txt
@@ -230,10 +237,23 @@ python3 tools/make_demo_map.py \
   --output /tmp/demo-with-moves.svg
 ```
 
-The normalized parser output also carries layout blocks, leaders, proposal
-boxes and new lines for a project-specific generator to consume. The demo
-generator intentionally implements only station names, codes and angles: it
-has no external data source for the other kinds.
+The reference parser normalizes every exported edit kind. The bundled demo
+generator replays the three kinds that map directly to its station records;
+the remaining normalized values are handed to your project-specific generator:
+
+| Section | Parsed | Replayed by `make_demo_map.py` |
+|---|:---:|:---:|
+| `NAME_MOVES` | yes | yes |
+| `CODE_NUDGES` | yes | yes |
+| `CHAIN_ANGLES` | yes | yes |
+| `LAYOUT_NUDGE` / `LAYOUT_SCALE` | yes | no |
+| `LEADER_NUDGE` | yes | no |
+| `SCHEMATIC_ANCHOR` | yes | no |
+| `NEW_LINE` | yes | no |
+
+The last four categories depend on generator-specific layout, leader,
+proposal-box and route data. The parser preserves them, but the demo generator
+does not pretend to know how another project's renderer stores those objects.
 
 ---
 

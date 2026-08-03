@@ -16,7 +16,9 @@ import re
 from pathlib import Path
 
 
-ROW_SECTIONS = ("NAME_MOVES", "CODE_NUDGES", "CHAIN_ANGLES")
+REQUIRED_ROW_SECTIONS = ("NAME_MOVES", "CODE_NUDGES")
+OPTIONAL_ROW_SECTIONS = ("CHAIN_ANGLES",)
+ROW_SECTIONS = REQUIRED_ROW_SECTIONS + OPTIONAL_ROW_SECTIONS
 ASSIGNMENTS = (
     "LAYOUT_NUDGE", "LAYOUT_SCALE", "LEADER_NUDGE",
     "SCHEMATIC_ANCHOR", "NEW_LINE",
@@ -27,8 +29,11 @@ def _rows(text, name):
     marker = "# ---- " + name
     start = text.find(marker)
     if start < 0:
-        return []
-    start = text.find("\n", start) + 1
+        return None
+    line_end = text.find("\n", start)
+    if line_end < 0:
+        raise ValueError("could not parse %s: section marker has no body" % name)
+    start = line_end + 1
     end = text.find("\n# ---- ", start)
     if end < 0:
         end = len(text)
@@ -164,6 +169,14 @@ def _metadata(text):
 def parse_move_list(text):
     """Return a normalized, JSON-serializable move-list dictionary."""
     rows = {name: _rows(text, name) for name in ROW_SECTIONS}
+    assigned = _assignments(text)
+    missing = ([name for name in REQUIRED_ROW_SECTIONS if rows[name] is None]
+               + [name for name in ASSIGNMENTS if name not in assigned])
+    if missing:
+        raise ValueError("could not find required section(s): %s" % ", ".join(missing))
+    for name in OPTIONAL_ROW_SECTIONS:
+        if rows[name] is None:
+            rows[name] = []
     name_moves = []
     seen_names = set()
     for row in rows["NAME_MOVES"]:
@@ -229,7 +242,7 @@ def parse_move_list(text):
             "new_angle": new_angle, "why": why,
         })
 
-    assigned = _validate_assignments(_assignments(text))
+    assigned = _validate_assignments(assigned)
     return {
         "metadata": _metadata(text),
         "name_moves": name_moves,
