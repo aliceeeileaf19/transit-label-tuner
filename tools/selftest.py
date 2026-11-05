@@ -440,6 +440,23 @@ def _(run):
     return "%d active elements/attributes removed; no script ran" % r["state"]["sanitized"]
 
 
+@check("Fit keeps the complete drawing clear of both tool panels")
+def _(run):
+    for size in ("1200,870", "1600,1000", "900,800", "390,844"):
+        r = run(uitest={"ops": []}, _window_size=size)
+        assert not r["errors"], r["errors"]
+        state = r["state"]
+        m = state["mapRect"]
+        for key in ("topbarRect", "dockRect", "infoRect"):
+            p = state[key]
+            separated = (m["right"] <= p["left"] or p["right"] <= m["left"] or
+                         m["bottom"] <= p["top"] or p["bottom"] <= m["top"])
+            assert separated, (size, key, m, p)
+        assert m["left"] >= 0 and m["top"] >= 0, (size, m)
+        assert m["right"] > m["left"] and m["bottom"] > m["top"], (size, m)
+    return "desktop, narrow, and phone layouts avoid both tool panels"
+
+
 @check("Fit keeps the map clear of the bottom dock on a narrow viewport")
 def _(run):
     r = run(uitest={"ops": []}, _window_size="900,800")

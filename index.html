@@ -1526,17 +1526,27 @@ function applyView(){
 function syncCTM(){ mapCTM = mapEl.getScreenCTM(); mapInv = mapCTM.inverse(); }
 function fitAll(){
   const r = stage.getBoundingClientRect();
-  /* Fit into the rectangle left by the dock. It sits on the right at desktop
-     widths and moves to the bottom below 980px; both layouts must keep the
-     complete drawing out from underneath it. */
+  /* The dock and toolbar both cover the canvas. Choose the larger usable
+     rectangle below or beside the toolbar, after reserving the dock. */
   const d = $("#rightDock").getBoundingClientRect();
+  const t = $("#topbar").getBoundingClientRect();
   const onRight = d.width>0 && d.left >= r.left+r.width*0.5;
   const onBottom = d.height>0 && d.top >= r.top+r.height*0.5;
-  const availW = Math.max(240, onRight ? d.left-r.left-16 : r.width);
-  const availH = Math.max(160, onBottom ? d.top-r.top-16 : r.height);
-  zoom = Math.min(availW/baseW, availH/(baseW*VB.h/VB.w)) * 0.98;
+  const right = onRight ? d.left-r.left-16 : r.width;
+  const info = $("#info").getBoundingClientRect();
+  const bottom = Math.min(onBottom ? d.top-r.top-16 : r.height, info.top-r.top-16);
+  const candidates = [
+    {x:0, y:Math.max(0,t.bottom-r.top+16), right, bottom},
+    {x:Math.max(0,t.right-r.left+16), y:0, right, bottom}
+  ].filter(a=>a.right>a.x && a.bottom>a.y);
+  const scale = a=>Math.min((a.right-a.x)/baseW,
+                            (a.bottom-a.y)/(baseW*VB.h/VB.w));
+  const area = candidates.sort((a,b)=>scale(b)-scale(a))[0];
+  if(!area) return; // No visible canvas remains in an extremely short window.
+  zoom = scale(area)*0.98;
   const drawW=baseW*zoom, drawH=drawW*VB.h/VB.w;
-  panX = (availW-drawW)/2; panY = (availH-drawH)/2;
+  panX = area.x+(area.right-area.x-drawW)/2;
+  panY = area.y+(area.bottom-area.y-drawH)/2;
   applyView(); scheduleCount();
 }
 stage.addEventListener("wheel", e=>{
@@ -3101,6 +3111,8 @@ function runUITest(){
       sanitized:SANITIZED_ITEMS,unsafeProbe:globalThis.__unsafeProbe||0,
       exportText:ext2ExportText(),mapRect:{left:mapRect.left,top:mapRect.top,right:mapRect.right,bottom:mapRect.bottom},
       dockRect:{left:dockRect.left,top:dockRect.top,right:dockRect.right,bottom:dockRect.bottom},
+      topbarRect:$("#topbar").getBoundingClientRect().toJSON(),
+      infoRect:$("#info").getBoundingClientRect().toJSON(),
       semanticClasses:{stations:host.querySelectorAll(".tlt-station").length,
         labels:host.querySelectorAll(".tlt-label").length,codes:host.querySelectorAll(".tlt-code-group").length},
       codePointer:getComputedStyle(host.querySelector(".tlt-code-group text")).pointerEvents};
